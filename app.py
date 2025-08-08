@@ -3,8 +3,150 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
-import os
 import streamlit.components.v1 as components
+import re
+
+def format_final_menu(menu_string: str) -> str:
+    """
+    HTML, <br>, 숫자, 괄호 등 모든 불필요한 요소를 제거하고
+    깔끔한 메뉴 목록 텍스트를 반환하는 최종 함수.
+    """
+    if not isinstance(menu_string, str) or not menu_string.strip():
+        return ""
+
+    # 1. <br> 태그를 표준 줄바꿈 문자로 변경
+    text = menu_string.replace('<br>', '\n')
+    
+    # 2. 괄호와 그 안의 내용(알레르기 정보)을 모두 제거
+    text = re.sub(r'\s*\([^)]*\)', '', text)
+    
+    # 3. 모든 숫자와 점(.)을 제거
+    text = re.sub(r'[\d\.]', '', text)
+    
+    # 4. 남아있는 HTML 태그가 있다면 제거
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # 5. 각 메뉴 라인의 앞뒤 공백을 제거하고 빈 줄은 삭제
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    
+    # 6. 깨끗해진 메뉴 목록을 다시 줄바꿈으로 합쳐서 반환
+    return "\n".join(lines)
+
+def format_calendar_entry(html_string: str) -> str:
+    """
+    HTML과 <br> 태그가 포함된 메뉴 문자열을
+    달력 표시에 적합한 여러 줄의 텍스트로 변환합니다.
+    """
+    if not isinstance(html_string, str) or not html_string.strip():
+        return ""
+
+    # 1. <br> 태그를 줄바꿈 문자(\n)로 먼저 변경합니다.
+    # 대소문자 구분 없이 <br>, <BR>, <br /> 등을 모두 처리합니다.
+    text_with_newlines = re.sub(r'<br\s*/?>', '\n', html_string, flags=re.IGNORECASE)
+
+    # 2. 나머지 모든 HTML 태그를 제거합니다.
+    text_only = re.sub(r'<[^>]+>', '', text_with_newlines)
+
+    # 3. 불필요한 앞뒤 공백을 최종적으로 제거합니다.
+    cleaned_text = text_only.strip()
+
+    return cleaned_text
+
+def format_menu_for_calendar(menu_data: str) -> str:
+    """
+    HTML 태그가 포함된 긴 메뉴 문자열을 여러 줄의 깔끔한 텍스트로 변환합니다.
+    달력의 각 셀에 표시하기에 적합한 형태로 만듭니다.
+    """
+    # 입력값이 문자열이 아니거나 비어있으면 빈 문자열 반환
+    if not isinstance(menu_data, str) or not menu_data.strip():
+        return ""
+
+    # 1. HTML 태그를 모두 제거
+    # 예: "<div style='...'>메뉴1<br>메뉴2</div>" -> "메뉴1 메뉴2"
+    text_only = re.sub(r'<[^>]+>', ' ', menu_data)
+
+    # 2. 문자열 앞뒤의 불필요한 공백이나 글머리 기호 제거
+    cleaned_string = text_only.lstrip('•- ').strip()
+
+    # 3. 여러 개의 공백을 하나의 공백으로 변경
+    cleaned_string = re.sub(r'\s+', ' ', cleaned_string)
+
+    # 4. 정규 표현식을 사용해 모든 메뉴 항목 찾기
+    # 괄호와 그 안의 숫자를 메뉴의 끝으로 인식
+    pattern = re.compile(r'.+?\s?\([\d\.]+\)?')
+    matches = pattern.findall(cleaned_string)
+
+    # 5. 그래도 찾아낸 항목이 없다면, 괄호를 기준으로 분리 시도
+    if not matches and ')' in cleaned_string:
+        matches = [m.strip() for m in cleaned_string.split(')') if m]
+        matches = [m + ')' for m in matches]  # 다시 괄호 붙여주기
+
+    # 6. 찾아낸 메뉴 항목들을 줄바꿈(\n)으로 연결
+    if matches:
+        # 각 메뉴가 한 줄씩 차지하도록 합침
+        return "\n".join(matches)
+    else:
+        # 어떤 방법으로도 메뉴를 분리하지 못했다면, 정리된 원본 텍스트를 반환
+        return cleaned_string
+
+def format_menu_for_display(menu_string: str) -> str:
+    """
+    하나의 긴 문자열로 된 급식 메뉴를 마크다운 리스트 형식으로 변환합니다.
+    예: "메뉴1 (1.2) 메뉴2 (3.4)" -> "- 메뉴1 (1.2)\n- 메뉴2 (3.4)"
+    """
+    # 입력값이 문자열이 아니거나 비어있으면 그대로 반환
+    if not isinstance(menu_string, str) or not menu_string.strip():
+        return ""
+
+    # 1. 문자열 앞뒤의 불필요한 공백이나 글머리 기호 제거
+    cleaned_string = menu_string.lstrip('•- ').strip()
+
+    # 2. 정규 표현식 패턴 정의
+    # (메뉴이름) (알레르기정보) 형태를 하나의 단위로 찾습니다.
+    # 예: '친환경쌀밥 (1.2.3)' 또는 '제육볶음 (5.6)'
+    pattern = re.compile(r'([\w\&\·\.]+\s?\([\d\.]*\))')
+    
+    # 2-1. 위 패턴으로 찾아지지 않을 경우를 대비한 2차 패턴
+    # 메뉴 이름에 특수문자나 공백이 더 많은 경우를 대비
+    pattern2 = re.compile(r'(.+?\s?\([\d\.]*\))')
+
+    # 3. 정규 표현식을 사용해 모든 메뉴 항목 찾기
+    matches = pattern.findall(cleaned_string)
+    if not matches:
+        matches = pattern2.findall(cleaned_string)
+
+    # 4. 그래도 찾아낸 항목이 없다면, 공백을 기준으로 분리 (최후의 수단)
+    if not matches:
+        # 괄호와 다음 단어 사이의 공백을 기준으로 분리
+        parts = re.split(r'\)\s+', cleaned_string)
+        # 마지막 항목에 닫는 괄호가 없을 수 있으므로 추가
+        matches = [part + ')' if not part.endswith(')') else part for part in parts]
+        matches = [m.strip() for m in matches if m.strip()]
+
+    # 5. 찾아낸 메뉴 항목들을 마크다운 리스트로 조합
+    if matches:
+        # 각 항목 앞뒤 공백을 제거하고 글머리 기호('- ')를 붙여서 한 줄씩 합침
+        formatted_menu = "\n".join([f"- {match.strip()}" for match in matches])
+        return formatted_menu
+    else:
+        # 어떤 방법으로도 메뉴를 분리하지 못했다면, 원본을 그대로 리스트 항목으로 반환
+        return f"- {cleaned_string}"
+
+RAG_SYSTEM_STATUS = "none"
+
+try:
+    from rag_system_v2 import get_rag_answer, initialize_rag
+    RAG_SYSTEM_STATUS = "v2_advanced"
+except ImportError as e:
+    try:
+        from rag_system import get_rag_answer, initialize_rag
+        RAG_SYSTEM_STATUS = "v1_standard"
+    except ImportError as e:
+        try:
+            from rag_system_lite import get_rag_answer, initialize_rag
+            RAG_SYSTEM_STATUS = "lite"
+        except ImportError as e:
+            RAG_SYSTEM_STATUS = "failed"
 
 # --- 초기 설정 ---
 
@@ -17,6 +159,11 @@ st.set_page_config(page_title="교실의 온도", page_icon="🌡️", layout="w
 # 세션 상태 초기화
 if 'generated_texts' not in st.session_state:
     st.session_state.generated_texts = {}
+
+# RAG 시스템 초기화 (앱 시작 시 한 번만)
+if 'rag_initialized' not in st.session_state:
+    st.session_state.rag_initialized = False
+
 
 
 # --- CSS 커스텀 스타일 ---
@@ -475,7 +622,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 기능 탭 생성
-tab1, tab2, tab3, tab4 = st.tabs(["📝 기안문 작성", "📚 생기부 기록", "💌 학부모 답장", "📢 가정통신문 작성"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🗂️ 기안문 작성", "🏗️ 생기부 기록", "💝 학부모 답장", "🎯 가정통신문 작성", "📞 전주화정초 정보 검색", "🍽️ 급식 식단표"])
 
 # 공통 함수: 체인 실행 및 결과 표시
 def run_chain_and_display(session_key, prompt_key, inputs, container):
@@ -483,7 +630,8 @@ def run_chain_and_display(session_key, prompt_key, inputs, container):
     try:
         # 이미 생성된 결과가 있는지 확인
         if session_key not in st.session_state.generated_texts:
-            llm = ChatOpenAI(model="gpt-4o", temperature=0.5) # api_key 인자가 없어도 자동으로 환경변수에서 찾습니다.
+            # api_key 인자가 없어도 자동으로 환경변수에서 찾습니다.
+            llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
             prompt = PROMPTS[prompt_key]
             chain = prompt | llm | StrOutputParser()
 
@@ -597,8 +745,8 @@ with tab1:
     doc_type = st.selectbox(
         "작성할 기안문 유형을 선택하세요.",
         ("선택하세요", 
-         "내부결재: 각종 계획 수립", "내부결재: 예산 집행(품의)", 
-         "대외발송: 자료 제출", "보고: 활동 결과 보고")
+        "내부결재: 각종 계획 수립", "내부결재: 예산 집행(품의)", 
+        "대외발송: 자료 제출", "보고: 활동 결과 보고")
     )
 
     if doc_type == "내부결재: 각종 계획 수립":
@@ -1183,20 +1331,13 @@ with tab2:
                             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
                         }}
                         
-                        .edit-controls {{
-                            display: flex;
-                            gap: 8px;
-                            margin-top: 8px;
-                        }}
-                        
                         .save-btn, .cancel-btn {{
                             padding: 6px 12px;
                             border: none;
-                            border-radius: 6px;
-                            font-size: 12px;
-                            font-weight: 600;
+                            border-radius: 4px;
                             cursor: pointer;
-                            transition: all 0.2s ease;
+                            font-size: 12px;
+                            transition: background-color 0.2s ease;
                         }}
                         
                         .save-btn {{
@@ -1206,7 +1347,6 @@ with tab2:
                         
                         .save-btn:hover {{
                             background: #38a169;
-                            transform: translateY(-1px);
                         }}
                         
                         .cancel-btn {{
@@ -1216,11 +1356,9 @@ with tab2:
                         
                         .cancel-btn:hover {{
                             background: #cbd5e0;
-                            transform: translateY(-1px);
                         }}
                         
-                        .message {{
-                            position: fixed;
+                        .message {
                             top: 20px;
                             right: 20px;
                             padding: 12px 20px;
@@ -1231,21 +1369,21 @@ with tab2:
                             transform: translateX(100%);
                             transition: transform 0.3s ease;
                             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-                        }}
+                        }
                         
-                        .message.success {{
+                        .message.success {
                             background: #48bb78;
                             color: white;
-                        }}
+                        }
                         
-                        .message.error {{
+                        .message.error {
                             background: #f56565;
                             color: white;
-                        }}
+                        }
                         
-                        .message.show {{
+                        .message.show {
                             transform: translateX(0);
-                        }}
+                        }
                     </style>
                 </head>
                 <body>
@@ -1261,54 +1399,33 @@ with tab2:
                             <tbody>
                 """
                 
-                # 테이블 행 생성
+                # 테이블 행 데이터 생성
                 for i, result_data in enumerate(st.session_state.generated_table_results):
-                    text = result_data['result']
-                    total_chars = len(text)
-                    
-                    # 나이스 바이트수 계산
-                    nice_bytes = 0
-                    for char in text:
-                        if ord(char) > 127:
-                            nice_bytes += 3
-                        else:
-                            nice_bytes += 1
-                    
-                    # HTML 이스케이프 처리
-                    escaped_text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
-                    escaped_for_js = text.replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
-                    
                     custom_table_html += f"""
                                 <tr>
-                                    <td class="number-cell">{i+1}</td>
-                                    <td class="name-cell">{result_data['name']}</td>
-                                    <td class="record-cell">
-                                        <div class="record-content">
-                                            <div class="record-text" id="text_{i}">
-                                                {escaped_text}
-                                            </div>
-                                            <div class="record-footer">
-                                                <div class="action-buttons">
-                                                    <span class="char-count">{total_chars}자/{nice_bytes}bytes</span>
-                                                    <button class="action-btn copy-btn" onclick="copyText({i})" title="복사">📋</button>
-                                                    <button class="action-btn edit-btn" onclick="editText({i})" title="수정">✏️</button>
-                                                </div>
-                                            </div>
+                                    <td>{i + 1}</td>
+                                    <td>{result_data['name']}</td>
+                                    <td class="text-cell" id="text_{i}">
+                                        <div class="text-content">
+                                            {result_data['result'].replace(chr(10), '<br>')}
+                                        </div>
+                                        <div class="button-group">
+                                            <button class="copy-btn" onclick="copyText({i})">복사</button>
+                                            <button class="edit-btn" onclick="editText({i})">수정</button>
                                         </div>
                                     </td>
                                 </tr>
                     """
                 
-                custom_table_html += f"""
+                custom_table_html += """
                             </tbody>
                         </table>
                     </div>
-                    
                     <script>
                         const originalTexts = [
                 """
                 
-                # JavaScript에서 사용할 원본 텍스트 배열 생성
+                # JavaScript 배열에 원본 텍스트 추가
                 for i, result_data in enumerate(st.session_state.generated_table_results):
                     escaped_for_js = result_data['result'].replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
                     custom_table_html += f"            '{escaped_for_js}'"
@@ -1340,12 +1457,14 @@ with tab2:
                             document.body.appendChild(textArea);
                             textArea.focus();
                             textArea.select();
+                            
                             try {{
                                 document.execCommand('copy');
                                 showMessage('복사되었습니다!', 'success');
                             }} catch (err) {{
                                 showMessage('복사에 실패했습니다.', 'error');
                             }}
+                            
                             document.body.removeChild(textArea);
                         }}
                         
@@ -1752,17 +1871,18 @@ with tab2:
                             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
                         }}
                         
+                        .save-btn, .cancel-btn {{
+                            padding: 6px 12px;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            transition: background-color 0.2s ease;
+                        }}
+                        
                         .save-btn {{
                             background: #48bb78;
                             color: white;
-                            border: none;
-                            padding: 8px 16px;
-                            border-radius: 6px;
-                            font-size: 12px;
-                            cursor: pointer;
-                            margin-top: 8px;
-                            margin-right: 8px;
-                            transition: background 0.2s ease;
                         }}
                         
                         .save-btn:hover {{
@@ -1772,18 +1892,38 @@ with tab2:
                         .cancel-btn {{
                             background: #e2e8f0;
                             color: #4a5568;
-                            border: none;
-                            padding: 8px 16px;
-                            border-radius: 6px;
-                            font-size: 12px;
-                            cursor: pointer;
-                            margin-top: 8px;
-                            transition: background 0.2s ease;
                         }}
                         
                         .cancel-btn:hover {{
                             background: #cbd5e0;
                         }}
+                        
+                        .message {
+                            top: 20px;
+                            right: 20px;
+                            padding: 12px 20px;
+                            border-radius: 8px;
+                            font-weight: 600;
+                            font-size: 13px;
+                            z-index: 1000;
+                            transform: translateX(100%);
+                            transition: transform 0.3s ease;
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                        }
+                        
+                        .message.success {
+                            background: #48bb78;
+                            color: white;
+                        }
+                        
+                        .message.error {
+                            background: #f56565;
+                            color: white;
+                        }
+                        
+                        .message.show {
+                            transform: translateX(0);
+                        }
                     </style>
                 </head>
                 <body>
@@ -1805,28 +1945,30 @@ with tab2:
                     escaped_for_js = result["result"].replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
                     behavior_texts.append(escaped_for_js)
                 
+                # 이 for 루프 전체가 올바른 들여쓰기로 수정되었습니다.
                 for i, result in enumerate(st.session_state.generated_behavior_table_results):
                     char_count = len(result["result"])
                     byte_count = sum(2 if ord(char) > 127 else 1 for char in result["result"])
                     
+                    # custom_table_html에 더하는 f-string의 시작 부분을 for 루프와 같은 레벨로 맞춥니다.
                     custom_table_html += f"""
-                                <tr>
-                                    <td class="number-cell">{i+1:02d}</td>
-                                    <td class="name-cell">{result["name"]}</td>
-                                    <td class="record-cell">
-                                        <div class="record-content">
-                                            <div class="record-text" id="behavior_text_{i}">{result["result"]}</div>
-                                            <div class="record-footer">
-                                                <span class="char-count" id="behavior_count_{i}">{char_count}자/{byte_count}byte</span>
-                                                <div class="action-buttons">
-                                                    <button class="action-btn copy-btn" onclick="copyBehaviorText({i})" title="복사">📋</button>
-                                                    <button class="action-btn edit-btn" onclick="editBehaviorText({i})" title="수정">✏️</button>
-                                                </div>
-                                            </div>
+                        <tr>
+                            <td class="number-cell">{i+1:02d}</td>
+                            <td class="name-cell">{result["name"]}</td>
+                            <td class="record-cell">
+                                <div class="record-content">
+                                    <div class="record-text" id="behavior_text_{i}">{result["result"]}</div>
+                                    <div class="record-footer">
+                                        <span class="char-count" id="behavior_count_{i}">{char_count}자/{byte_count}byte</span>
+                                        <div class="action-buttons">
+                                            <button class="action-btn copy-btn" onclick="copyBehaviorText({i})" title="복사">📋</button>
+                                            <button class="action-btn edit-btn" onclick="editBehaviorText({i})" title="수정">✏️</button>
                                         </div>
-                                    </td>
-                                </tr>
-                    """
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+            """
                 
                 custom_table_html += """
                             </tbody>
@@ -1947,34 +2089,20 @@ with tab2:
                             const msgDiv = document.createElement('div');
                             msgDiv.className = 'behavior-copy-message';
                             msgDiv.textContent = message;
-                            msgDiv.style.cssText = `
-                                position: fixed;
-                                top: 20px;
-                                right: 20px;
-                                background: ${type === 'success' ? '#48bb78' : '#f56565'};
-                                color: white;
-                                padding: 12px 24px;
-                                border-radius: 8px;
-                                font-size: 14px;
-                                font-weight: 500;
-                                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                                z-index: 10000;
-                                animation: behaviorSlideIn 0.3s ease-out;
-                            `;
-                            
                             document.body.appendChild(msgDiv);
                             
-                            // 3초 후 메시지 제거
                             setTimeout(() => {
-                                if (msgDiv.parentNode) {
-                                    msgDiv.style.animation = 'behaviorSlideOut 0.3s ease-in';
-                                    setTimeout(() => {
-                                        if (msgDiv.parentNode) {
-                                            msgDiv.remove();
-                                        }
-                                    }, 300);
-                                }
-                            }, 3000);
+                                msgDiv.classList.add('show');
+                            }, 100);
+                            
+                            setTimeout(() => {
+                                msgDiv.classList.remove('show');
+                                setTimeout(() => {
+                                    if (msgDiv.parentNode) {
+                                        msgDiv.parentNode.removeChild(msgDiv);
+                                    }
+                                }, 300);
+                            }, 2500);
                         }
                         
                         // 행발 전용 CSS 스타일 추가
@@ -2090,6 +2218,367 @@ with tab4:
                 }, st)
             else: 
                 st.warning("핵심 내용을 입력해주세요.")
+
+# --- 탭 5: 전주화정초 정보 검색 ---
+with tab5:
+    st.header("📞 전주화정초 정보 검색")
+    st.markdown("**선생님 연락처 및 학교 정보를 빠르게 찾아보세요!**")
+    
+    # RAG 시스템 상태 표시
+    if RAG_SYSTEM_STATUS == "failed":
+        st.error("❌ RAG 시스템을 로드할 수 없습니다. 필요한 라이브러리를 설치해주세요.")
+        st.code("pip install scikit-learn pandas numpy", language="bash")
+        st.stop()
+    
+    st.markdown("**찾을 수 있는 정보:** 선생님 내선번호, 팩스번호, 와이파이 정보, 부서별 연락처 등")
+    
+    # RAG 시스템 초기화
+    if not st.session_state.rag_initialized:
+        with st.spinner("시스템을 준비하고 있습니다..."):
+            try:
+                initialize_rag()
+                st.session_state.rag_initialized = True
+            except Exception as e:
+                st.error(f"시스템 초기화 실패: {e}")
+                st.stop()
+    
+    # 질문 입력
+    with st.container(border=True):
+        user_question = st.text_input(
+            "찾고 싶은 정보를 입력하세요:",
+            placeholder="학교 교무실 내선번호 알려줘",
+            key="rag_question"
+        )
+        
+        ask_button = st.button("🔍 검색하기", use_container_width=True)
+    
+    # 질문 처리 및 결과 표시
+    if ask_button and user_question.strip():
+        with st.spinner("전주화정초 정보를 검색하고 있습니다..."):
+            try:
+                result = get_rag_answer(user_question)
+                
+                # 검색 결과 바로 표시
+                st.markdown(f"**🔍 검색:** {user_question}")
+                
+                # 결과가 새로운 형식인지 확인 (하위 호환성)
+                if 'results' in result and isinstance(result['results'], list):
+                    results_list = result['results']
+                else:
+                    # 기존 형식 지원
+                    results_list = [{
+                        'answer': result.get('answer', ''),
+                        'confidence': result.get('confidence', 0)
+                    }]
+                
+                # 첫 번째 결과 (메인 답변) 표시
+                if results_list:
+                    main_result = results_list[0]
+                    confidence = main_result.get('confidence', 0)
+                    
+                    # 신뢰도에 따른 답변 스타일
+                    if confidence > 0.7:
+                        confidence_color = "#28a745"  # 녹색
+                        confidence_text = "높음"
+                    elif confidence > 0.3:
+                        confidence_color = "#ffc107"  # 노란색
+                        confidence_text = "보통"
+                    else:
+                        confidence_color = "#dc3545"  # 빨간색
+                        confidence_text = "낮음"
+                    
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #f8f9fa; 
+                        padding: 15px; 
+                        border-radius: 8px; 
+                        border-left: 4px solid {confidence_color};
+                        margin: 10px 0;
+                    ">
+                        <strong>📞 결과:</strong><br>
+                        {main_result['answer']}
+                        <br><br>
+                        <small style="color: {confidence_color};">
+                            <strong>신뢰도: {confidence_text}</strong>
+                        </small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # 추가 결과들 (2번째, 3번째) 표시
+                    if len(results_list) > 1:
+                        st.markdown("### 🔍 다른 관련 정보")
+                        st.markdown("*혹시 이런 정보를 찾으셨나요?*")
+                        
+                        for i, additional_result in enumerate(results_list[1:], 2):
+                            additional_confidence = additional_result.get('confidence', 0)
+                            
+                            # 추가 결과 신뢰도 색상 (더 연한 색상 사용)
+                            if additional_confidence > 0.7:
+                                additional_color = "#d4edda"  # 연한 녹색
+                                border_color = "#28a745"
+                            elif additional_confidence > 0.3:
+                                additional_color = "#fff3cd"  # 연한 노란색
+                                border_color = "#ffc107"
+                            else:
+                                additional_color = "#f8d7da"  # 연한 빨간색
+                                border_color = "#dc3545"
+                            
+                            confidence_text_additional = "높음" if additional_confidence > 0.7 else "보통" if additional_confidence > 0.3 else "낮음"
+                            
+                            st.markdown(f"""
+                            <div style="
+                                background-color: {additional_color}; 
+                                padding: 12px; 
+                                border-radius: 6px; 
+                                border-left: 3px solid {border_color};
+                                margin: 8px 0;
+                                font-size: 0.95em;
+                            ">
+                                <strong>📋 추가 정보 {i-1}:</strong><br>
+                                {additional_result['answer']}
+                                <br><br>
+                                <small style="color: {border_color};">
+                                    <strong>신뢰도: {confidence_text_additional}</strong>
+                                </small>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"검색 중 오류가 발생했습니다: {e}")
+    # 사용 가이드
+    with st.expander("💡 사용 가이드"):
+        st.markdown("""
+        ### 📞 전주화정초 정보 검색 사용법
+        
+        1. **검색 입력**: 찾고 싶은 선생님 이름이나 부서명을 입력하세요
+        2. **자동 검색**: 시스템이 관련 연락처와 정보를 찾아 제공합니다
+        3. **신뢰도 확인**: 검색 결과의 정확도를 색깔로 구분해서 표시합니다
+        4. **상세 정보**: 더 자세한 정보는 참고 자료에서 확인할 수 있습니다
+        
+        ### 🔍 검색 예시
+        - "교장선생님"
+        - "교무실 팩스"
+        - "교감선생님"
+        - "와이파이"
+        
+        ### 💡 도움말
+        - ✅ **검색 결과의 정확도**를 색깔로 표시합니다
+        - ✅ **참고 자료**에서 원본 정보를 확인할 수 있습니다
+        """)
+
+# --- 탭 6: 급식 식단표 ---
+with tab6:
+    st.header("🍽️ 급식 식단표")
+    st.markdown("전주화정초등학교의 급식 식단표를 월별 또는 주별로 확인하세요.")
+    
+    # 필요한 라이브러리 import (상단에 이미 있으면 중복이지만 안전을 위해)
+    import requests
+    from datetime import datetime, timedelta
+    
+    # API 설정
+    API_KEY = "2d74e530f4334ab9906e6171f031560a"
+    OFFICE_CODE = "P10"  # 전북
+    SCHOOL_CODE = "8332156"  # 전주화정초
+    BASE_URL = "https://open.neis.go.kr/hub/mealServiceDietInfo"
+    
+    # 조회 방식 선택
+    view_mode = st.radio("조회 방식 선택", ["주별 조회", "월별 조회"], horizontal=True)
+    
+    def get_meal_data_for_month(year_month: str):
+        """특정 월의 급식 데이터를 API를 통해 가져옵니다."""
+        params = {
+            'KEY': API_KEY,
+            'Type': 'json',
+            'pIndex': 1,
+            'pSize': 100,
+            'ATPT_OFCDC_SC_CODE': OFFICE_CODE,
+            'SD_SCHUL_CODE': SCHOOL_CODE,
+            'MLSV_YMD': year_month
+        }
+        try:
+            response = requests.get(BASE_URL, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            if 'mealServiceDietInfo' in data:
+                return data['mealServiceDietInfo'][1]['row']
+            elif 'RESULT' in data and data['RESULT']['CODE'] == 'INFO-200':
+                return []
+            else:
+                error_message = data.get('RESULT', {}).get('MESSAGE', '알 수 없는 오류가 발생했습니다.')
+                st.error(f"API 오류: {error_message}")
+                return None
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"네트워크 오류가 발생했습니다: {e}")
+            return None
+
+    def format_menu(menu_text: str):
+        """메뉴 문자열의 <br/>을 줄바꿈으로 바꾸고, 알레르기 정보를 정리합니다."""
+        menu_items = menu_text.replace('<br/>', '\n- ')
+        return '- ' + menu_items
+    
+    if view_mode == "월별 조회":
+        st.subheader("📅 월별 급식 조회")
+        
+        # 연도, 월 선택
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            current_year = datetime.now().year
+            selected_year = st.selectbox("연도 선택", range(current_year-1, current_year+2), index=1)
+        
+        with col2:
+            current_month = datetime.now().month
+            selected_month = st.selectbox("월 선택", range(1, 13), index=current_month-1)
+        
+        with col3:
+            st.info(f"📅 {selected_year}년 {selected_month}월 급식 달력")
+        
+        # 월간 급식 데이터 가져오기
+        year_month = f"{selected_year}{selected_month:02d}"
+        
+        with st.spinner("급식 데이터를 가져오는 중..."):
+            meal_data = get_meal_data_for_month(year_month)
+        
+        if meal_data:
+            # 급식 데이터를 날짜별 딕셔너리로 정리
+            # .get()을 사용해 키가 없어도 오류가 발생하지 않도록 수정
+            # 'MLSV_YMD' 키가 있는 항목만 처리하도록 if 조건 추가
+            meal_dict = {item.get('MLSV_YMD'): item.get('DDISH_NM', '') for item in meal_data if item.get('MLSV_YMD')}
+
+            # 달력 헤더 (월~금)
+            days_of_week = ["월", "화", "수", "목", "금"]
+            cols = st.columns(5)
+            for col, day in zip(cols, days_of_week):
+                with col:
+                    st.markdown(f"<p style='text-align: center;'><b>{day}</b></p>", unsafe_allow_html=True)
+            
+            st.markdown("<hr style='margin: 0.5rem 0;'>", unsafe_allow_html=True)
+
+            # 달력 내용 생성
+            import calendar
+            cal = calendar.Calendar()
+            month_days = cal.monthdatescalendar(selected_year, selected_month)
+
+            for week in month_days:
+                # 5열 (평일) 생성
+                cols = st.columns(5)
+                # 평일(월요일=0, ..., 금요일=4)만 처리
+                for i in range(5):
+                    day = week[i]
+                    with cols[i]:
+                        if day.month == selected_month:
+                            date_str = day.strftime("%Y%m%d")
+                            menu = meal_dict.get(date_str, "")
+                            
+                            # 새로 추가한 함수로 메뉴 텍스트 완벽하게 정리
+                            final_menu_text = format_final_menu(menu)
+                            
+                            # CSS로 최소 높이만 지정하고, 내용은 HTML <br>로 줄바꿈
+                            st.markdown(f"""
+                            <div style='border: 1px solid #eee; border-radius: 5px; padding: 8px; min-height: 140px;'>
+                                <b style='color: #333;'>{day.day}</b>
+                                <div style='font-size: 0.85em; margin-top: 5px; line-height: 1.5;'>
+                                    {final_menu_text.replace('\n', '<br>')}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            # 다른 달의 날짜는 회색으로 표시하고 칸만 유지
+                            st.markdown(f"""
+                            <div style='border: 1px solid #f8f9fa; border-radius: 5px; padding: 8px; min-height: 140px; color: #ccc;'>
+                                {day.day}
+                            </div>
+                            """, unsafe_allow_html=True)
+        else:
+            st.warning("해당 월의 급식 정보를 가져올 수 없습니다.")
+    
+    else:  # 주별 조회
+        st.subheader("📅 주별 급식 조회")
+        
+        # 날짜 선택
+        selected_date = st.date_input("조회할 주를 선택하세요 (해당 주의 아무 날짜나 선택)", datetime.now())
+    
+        # 선택된 날짜를 기준으로 해당 주의 시작(월요일)과 끝(일요일) 날짜 계산
+        start_of_week = selected_date - timedelta(days=selected_date.weekday())
+        end_of_week = start_of_week + timedelta(days=6)
+        st.info(f"**조회 기간:** {start_of_week.strftime('%Y년 %m월 %d일')} ~ {end_of_week.strftime('%Y년 %m월 %d일')}")
+        
+        # 자동으로 해당 주 데이터 조회
+        with st.spinner("주간 급식 데이터를 가져오는 중..."):
+            # 필요한 월(들)의 데이터를 가져오기
+            months_to_fetch = set()
+            months_to_fetch.add(start_of_week.strftime('%Y%m'))
+            months_to_fetch.add(end_of_week.strftime('%Y%m'))
+
+            all_meals_data = []
+            for month in months_to_fetch:
+                monthly_data = get_meal_data_for_month(month)
+                if monthly_data:
+                    all_meals_data.extend(monthly_data)
+
+        # 가져온 전체 데이터에서 해당 주에 해당하는 데이터만 필터링
+        if all_meals_data:
+            # 날짜 범위를 YYYYMMDD 형식의 문자열 리스트로 생성 (평일만)
+            date_range_str = [(start_of_week + timedelta(days=i)).strftime('%Y%m%d') for i in range(5)]
+            
+            # 해당 주에 속하는 식단만 필터링
+            weekly_meals = [meal for meal in all_meals_data if meal['MLSV_YMD'] in date_range_str]
+
+            if not weekly_meals:
+                st.warning("해당 주에는 등록된 급식 정보가 없습니다.")
+            else:
+                # 날짜별로 데이터 그룹화
+                meals_by_date = {}
+                for meal in weekly_meals:
+                    date_key = meal['MLSV_YMD']
+                    if date_key not in meals_by_date:
+                        meals_by_date[date_key] = []
+                    meals_by_date[date_key].append(meal)
+                    
+                # 주간 급식표 - 순수 Streamlit 방식
+                st.markdown("### 📅 주간 급식표")
+                st.write("")  # 간격 추가
+                
+                # 5개 컬럼 생성 (월~금)
+                col1, col2, col3, col4, col5 = st.columns(5)
+                cols = [col1, col2, col3, col4, col5]
+                weekdays_short = ['월', '화', '수', '목', '금']
+                
+                for i in range(5):
+                    current_day = start_of_week + timedelta(days=i)
+                    day_str = current_day.strftime('%Y%m%d')
+                    
+                    with cols[i]:
+                        # 요일 헤더
+                        st.subheader(f"{weekdays_short[i]} {current_day.strftime('%m/%d')}")
+                        
+                        # 메뉴 표시
+                        if day_str in meals_by_date:
+                            day_meals = sorted(meals_by_date[day_str], key=lambda x: x['MMEAL_SC_NM'])
+                            
+                            for meal in day_meals:
+                                # HTML 코드가 포함된 '더러운' 데이터를 가져옴
+                                dirty_menu_data = meal['DDISH_NM']
+                                
+                                # --- 여기에 함수 호출을 반드시 추가! ---
+                                cleaned_menu_for_display = format_calendar_entry(dirty_menu_data)
+                                
+                                # 메뉴 항목들을 분리하여 표시
+                                formatted_menu = format_menu_for_display(cleaned_menu_for_display)
+                                
+                                if formatted_menu:
+                                    st.markdown(formatted_menu)
+                                
+                                # 칼로리 정보
+                                if meal['CAL_INFO']:
+                                    st.caption(meal['CAL_INFO'])
+                        else:
+                            st.write("급식 없음")
+                            st.write("")  # 빈 공간 추가
+        else:
+            st.warning("해당 주에는 등록된 급식 정보가 없습니다.")
 
 # --- 하단 제작자 정보 ---
 st.markdown("---")

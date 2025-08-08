@@ -1,0 +1,9 @@
+streamlit
+langchain-openai
+python-dotenv
+pandas
+numpy
+scikit-learn
+sentence-transformers
+transformers
+torch
