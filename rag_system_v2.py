@@ -31,10 +31,18 @@ class SchoolInfoRAG:
         self.initialize_model()
     
     def load_data(self):
-        """CSV 데이터 로드"""
+        """CSV 데이터 로드 및 full_text 컬럼 생성"""
         try:
             self.data = pd.read_csv(self.csv_path)
+            
+            # question과 answer 컬럼을 결합하여 full_text 컬럼 생성
+            self.data['full_text'] = (
+                self.data['question'].fillna('').astype(str) + ' ' + 
+                self.data['answer'].fillna('').astype(str)
+            ).str.strip()
+            
             print(f"데이터 로드 완료: {len(self.data)}개 질문-답변 쌍")
+            print("question과 answer를 결합한 full_text 컬럼 생성 완료")
         except Exception as e:
             print(f"데이터 로드 실패: {e}")
             raise
@@ -70,13 +78,14 @@ class SchoolInfoRAG:
     
     def build_sentence_transformer_model(self):
         """Sentence Transformers를 사용한 모델 구축"""
-        # 질문과 답변 추출
+        # 질문, 답변, full_text 추출
         self.questions = self.data['question'].fillna('').astype(str).tolist()
         self.answers = self.data['answer'].fillna('').astype(str).tolist()
+        self.full_texts = self.data['full_text'].fillna('').astype(str).tolist()
         
-        # 질문들을 임베딩으로 변환
-        print("질문 임베딩 생성 중...")
-        self.question_embeddings = self.model.encode(self.questions)
+        # full_text를 임베딩으로 변환 (질문+답변 모두 포함)
+        print("full_text 임베딩 생성 중...")
+        self.question_embeddings = self.model.encode(self.full_texts)
         print("Sentence Transformers 모델 구축 완료")
     
     def build_sklearn_model(self):
@@ -87,12 +96,13 @@ class SchoolInfoRAG:
             
             print("sklearn을 사용하여 RAG 모델 구축 중...")
             
-            # 질문과 답변 추출
+            # 질문, 답변, full_text 추출
             self.questions = self.data['question'].fillna('').astype(str).tolist()
             self.answers = self.data['answer'].fillna('').astype(str).tolist()
+            self.full_texts = self.data['full_text'].fillna('').astype(str).tolist()
             
-            # 질문 텍스트 전처리
-            processed_questions = [self.preprocess_text(q) for q in self.questions]
+            # full_text 전처리 (질문+답변 모두 포함)
+            processed_full_texts = [self.preprocess_text(ft) for ft in self.full_texts]
             
             # TF-IDF 벡터화
             self.model = TfidfVectorizer(
@@ -103,8 +113,8 @@ class SchoolInfoRAG:
                 norm='l2'
             )
             
-            # 질문들을 벡터화
-            self.question_embeddings = self.model.fit_transform(processed_questions)
+            # full_text를 벡터화
+            self.question_embeddings = self.model.fit_transform(processed_full_texts)
             self.use_sentence_transformers = False
             print("sklearn 모델 구축 완료")
             
@@ -117,9 +127,10 @@ class SchoolInfoRAG:
         """키워드 매칭 백업 모델"""
         print("키워드 매칭 모델 구축 중...")
         
-        # 질문과 답변 추출
+        # 질문, 답변, full_text 추출
         self.questions = self.data['question'].fillna('').astype(str).tolist()
         self.answers = self.data['answer'].fillna('').astype(str).tolist()
+        self.full_texts = self.data['full_text'].fillna('').astype(str).tolist()
         self.model = None
         self.question_embeddings = None
         self.use_sentence_transformers = False
@@ -194,22 +205,23 @@ class SchoolInfoRAG:
             return self.search_similar_keyword(query, top_k)
     
     def search_similar_keyword(self, query: str, top_k: int = 3) -> List[Tuple[str, str, float]]:
-        """키워드 매칭을 사용한 백업 검색"""
+        """키워드 매칭을 사용한 백업 검색 - full_text 기반"""
         try:
             # 쿼리에서 키워드 추출
             query_keywords = set(re.findall(r'\b\w+\b', query.lower()))
             
             results = []
-            for i, question in enumerate(self.questions):
-                question_keywords = set(re.findall(r'\b\w+\b', question.lower()))
+            for i, full_text in enumerate(self.full_texts):
+                # full_text에서 키워드 추출 (질문+답변 모두 검색)
+                full_text_keywords = set(re.findall(r'\b\w+\b', full_text.lower()))
                 
                 # 공통 키워드 비율 계산
-                if len(question_keywords) > 0:
-                    common_keywords = query_keywords & question_keywords
-                    similarity = len(common_keywords) / len(question_keywords | query_keywords)
+                if len(full_text_keywords) > 0:
+                    common_keywords = query_keywords & full_text_keywords
+                    similarity = len(common_keywords) / len(full_text_keywords | query_keywords)
                     
                     if similarity > 0:
-                        results.append((question, self.answers[i], similarity))
+                        results.append((self.questions[i], self.answers[i], similarity))
             
             # 유사도 순으로 정렬하고 상위 k개 반환
             results.sort(key=lambda x: x[2], reverse=True)
@@ -237,7 +249,7 @@ class SchoolInfoRAG:
             print(f"검색 실패: {e}")
             return self.search_similar_keyword(query, top_k)
     
-    def get_answer(self, query: str, threshold: float = 0.1) -> dict:
+    def get_answer(self, query: str, threshold: float = 0.05) -> dict:
         """
         질문에 대한 답변 생성 - 상위 3개 결과 반환
         """
@@ -362,6 +374,9 @@ if __name__ == "__main__":
     for query in test_queries:
         print(f"\n질문: {query}")
         result = get_rag_answer(query)
-        print(f"답변: {result['answer']}")
-        print(f"신뢰도: {result['confidence']:.3f}")
         print(f"방법: {result['method']}")
+        for i, res in enumerate(result['results'], 1):
+            print(f"답변 {i}: {res['answer']}")
+            print(f"신뢰도 {i}: {res['confidence']:.3f}")
+            if i == 1:  # 첫 번째 답변만 자세히 표시
+                break

@@ -6,7 +6,9 @@
       "Bash(pip install:*)",
       "Bash(streamlit run:*)",
       "Bash(python:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }
