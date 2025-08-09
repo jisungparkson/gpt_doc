@@ -5,6 +5,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
+import pandas as pd
+from io import BytesIO
+
+# 데이터프레임을 엑셀 파일(bytes)로 변환하는 헬퍼 함수
+def to_excel(df):
+    output = BytesIO()
+    # index=False를 설정하여 엑셀 파일에 불필요한 인덱스 열이 생기지 않도록 함
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    processed_data = output.getvalue()
+    return processed_data
 
 def draw_saengibu_tab(prompts):
     """생기부 기록 탭 UI"""
@@ -118,16 +129,13 @@ def draw_saengibu_tab(prompts):
                 col_generate = st.columns([3, 1])
                 with col_generate[1]:
                     if st.button("✨ 전체 생성", use_container_width=True, key="generate_all"):
-                        # 비어있는 관찰 내용 확인
-                        empty_observations = [i+1 for i, data in enumerate(st.session_state.student_data) if not data["observation"].strip()]
+                        # 전체 학생 교과세특 생성
+                        st.session_state.generated_table_results = []
                         
-                        if empty_observations:
-                            st.warning(f"{', '.join(map(str, empty_observations))}번 학생의 관찰 내용을 입력해주세요.")
-                        else:
-                            # 전체 학생 교과세특 생성
-                            st.session_state.generated_table_results = []
-                            
-                            for i, data in enumerate(st.session_state.student_data):
+                        for i, data in enumerate(st.session_state.student_data):
+                            # 관찰 내용이 있는지 확인
+                            if data["observation"].strip():
+                                # 내용이 있으면, LLM을 통해 결과 생성
                                 with st.spinner(f"{data['name']} 교과세특 생성 중..."):
                                     try:
                                         llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
@@ -142,205 +150,98 @@ def draw_saengibu_tab(prompts):
                                         })
                                         
                                         st.session_state.generated_table_results.append({
+                                            "original_number": i + 1,
                                             "name": data["name"],
                                             "result": result
                                         })
                                     except Exception as e:
                                         st.error(f"{data['name']} 교과세특 생성 실패: {e}")
                                         st.session_state.generated_table_results.append({
+                                            "original_number": i + 1,
                                             "name": data["name"],
                                             "result": f"생성 실패: {e}"
                                         })
-                            
-                            st.success("전체 학생 교과세특 생성 완료!")
+                            else:
+                                # 내용이 없으면, 빈 결과로 추가
+                                st.session_state.generated_table_results.append({
+                                    "original_number": i + 1,
+                                    "name": data["name"],
+                                    "result": ""  # 빈 문자열로 결과를 설정
+                                })
+                        
+                        st.success("전체 학생 교과세특 생성 완료!")
         
         # 결과 표시
         if 'generated_table_results' in st.session_state and st.session_state.generated_table_results:
             with st.container(border=True):
                 st.subheader("📄 생성 결과")
                 
-                # NEIS 스타일 헤더 표시
+                # 1. 헤더 수정: "NEIS로 입력 적용" 문구 제거 및 왼쪽 정렬
                 st.markdown(f"""
-                <div style="
-                    background-color: #e8f4f8;
-                    padding: 8px 12px;
-                    border: 1px solid #ddd;
-                    border-bottom: none;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    font-size: 14px;
-                ">
+                <div style="background-color: #e8f4f8; padding: 8px 12px; border: 1px solid #ddd; border-bottom: none; display: flex; justify-content: flex-start; align-items: center; font-size: 14px;">
                     <span style="color: #0066cc; font-weight: bold;">{subject}</span>
-                    <span style="color: #666; font-size: 12px;">NEIS로 입력 적용 {len(st.session_state.generated_table_results)} ▲</span>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # 2. 엑셀 다운로드를 위한 데이터프레임 생성
+                results_data = st.session_state.generated_table_results
+                df_seutuk = pd.DataFrame({
+                    "번호": [data["original_number"] for data in results_data],
+                    "이름": [data["name"] for data in results_data],
+                    "평어": [data["result"] for data in results_data]
+                })
+                excel_data_seutuk = to_excel(df_seutuk)
+
+                # 3. 엑셀 다운로드 버튼 추가
+                st.download_button(
+                    label="📥 엑셀 파일로 다운로드",
+                    data=excel_data_seutuk,
+                    file_name=f"{subject}_교과세특_결과.xlsx",
+                    mime="application/vnd.ms-excel",
+                    use_container_width=True
+                )
                 
-                
-                # 완전히 새로운 모던 커스텀 테이블 HTML 생성
-                custom_table_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        * {{
-                            margin: 0;
-                            padding: 0;
-                            box-sizing: border-box;
-                        }}
-                        
-                        body {{
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                            background: #f8fafc;
-                            padding: 20px;
-                        }}
-                        
-                        .custom-table-container {{
-                            background: white;
-                            border-radius: 12px;
-                            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                            overflow: hidden;
-                            border: 1px solid #e2e8f0;
-                        }}
-                        
-                        .custom-table {{
-                            width: 100%;
-                            border-collapse: collapse;
-                        }}
-                        
-                        .custom-table th {{
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            color: white;
-                            padding: 16px;
-                            text-align: center;
-                            font-weight: 600;
-                            font-size: 14px;
-                            letter-spacing: 0.5px;
-                            border: none;
-                        }}
-                        
-                        .custom-table th:first-child {{
-                            width: 80px;
-                        }}
-                        
-                        .custom-table th:nth-child(2) {{
-                            width: 120px;
-                        }}
-                        
-                        .custom-table td {{
-                            padding: 0;
-                            border-bottom: 1px solid #e2e8f0;
-                            vertical-align: top;
-                        }}
-                        
-                        .text-cell {{
-                            padding: 20px;
-                            position: relative;
-                            background: white;
-                        }}
-                        
-                        .text-content {{
-                            line-height: 1.6;
-                            font-size: 13px;
-                            color: #2d3748;
-                            min-height: 60px;
-                            margin-bottom: 10px;
-                            padding-right: 100px;
-                        }}
-                        
-                        .button-group {{
-                            display: flex;
-                            gap: 8px;
-                            justify-content: flex-end;
-                            margin-top: 12px;
-                        }}
-                        
-                        .copy-btn, .edit-btn {{
-                            background: none;
-                            border: 1px solid #e2e8f0;
-                            padding: 6px 12px;
-                            border-radius: 6px;
-                            cursor: pointer;
-                            font-size: 12px;
-                            transition: all 0.2s ease;
-                        }}
-                        
-                        .copy-btn {{
-                            color: #4299e1;
-                            border-color: #4299e1;
-                        }}
-                        
-                        .copy-btn:hover {{
-                            background: #4299e1;
-                            color: white;
-                        }}
-                        
-                        .edit-btn {{
-                            color: #48bb78;
-                            border-color: #48bb78;
-                        }}
-                        
-                        .edit-btn:hover {{
-                            background: #48bb78;
-                            color: white;
-                        }}
-                        
-                        .edit-textarea {{
-                            width: 100%;
-                            min-height: 100px;
-                            padding: 12px;
-                            border: 2px solid #e2e8f0;
-                            border-radius: 8px;
-                            font-size: 13px;
-                            font-family: inherit;
-                            line-height: 1.6;
-                            resize: vertical;
-                        }}
-                        
-                        .save-btn, .cancel-btn {{
-                            padding: 6px 12px;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 12px;
-                            margin-top: 8px;
-                            margin-right: 8px;
-                        }}
-                        
-                        .save-btn {{
-                            background: #48bb78;
-                            color: white;
-                        }}
-                        
-                        .cancel-btn {{
-                            background: #e2e8f0;
-                            color: #4a5568;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <div class="custom-table-container">
-                        <table class="custom-table">
-                            <thead>
-                                <tr>
-                                    <th>번호</th>
-                                    <th>이름</th>
-                                    <th>평어</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                # 테이블 HTML 생성 시작
+                custom_table_html = """
+                <!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; padding: 20px; }
+                .custom-table-container { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid #e2e8f0; }
+                .custom-table { width: 100%; border-collapse: collapse; }
+                .custom-table th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; text-align: center; font-weight: 600; font-size: 14px; letter-spacing: 0.5px; border: none; }
+                .custom-table th:first-child { width: 80px; }
+                .custom-table th:nth-child(2) { width: 120px; }
+                .custom-table td { padding: 0; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+                .text-cell { padding: 20px; position: relative; background: white; }
+                .text-content { line-height: 1.6; font-size: 13px; color: #2d3748; min-height: 60px; margin-bottom: 5px; padding-right: 100px; }
+                .char-counter { text-align: right; color: #666; font-size: 11px; margin-bottom: 10px; }
+                .button-group { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+                .copy-btn, .edit-btn { background: none; border: 1px solid #e2e8f0; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s ease; }
+                .copy-btn { color: #4299e1; border-color: #4299e1; }
+                .copy-btn:hover { background: #4299e1; color: white; }
+                .edit-btn { color: #48bb78; border-color: #48bb78; }
+                .edit-btn:hover { background: #48bb78; color: white; }
+                .edit-textarea { width: 100%; min-height: 100px; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical; }
+                .save-btn, .cancel-btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-top: 8px; margin-right: 8px; }
+                .save-btn { background: #48bb78; color: white; }
+                .cancel-btn { background: #e2e8f0; color: #4a5568; }
+                </style></head><body><div class="custom-table-container"><table class="custom-table">
+                <thead><tr><th>번호</th><th>이름</th><th>평어</th></tr></thead><tbody>
                 """
                 
-                # 테이블 행 데이터 생성
-                for i, result_data in enumerate(st.session_state.generated_table_results):
+                # 테이블 행 데이터 생성 (글자/바이트 수 카운터 추가)
+                for i, result_data in enumerate(results_data):
+                    char_count = len(result_data['result'])
+                    byte_count = sum(2 if ord(char) > 127 else 1 for char in result_data['result'])
+                    
                     custom_table_html += f"""
                                 <tr>
-                                    <td style="text-align: center; padding: 20px; background: #f8fafc; font-weight: 700;">{i + 1}</td>
-                                    <td style="text-align: center; padding: 20px; background: #f8fafc; font-weight: 600;">{result_data['name']}</td>
+                                    <td style="text-align: center; padding: 20px; background: #f8fafc; font-weight: 700; vertical-align: middle;">{result_data['original_number']:02d}</td>
+                                    <td style="text-align: center; padding: 20px; background: #f8fafc; font-weight: 600; vertical-align: middle;">{result_data['name']}</td>
                                     <td class="text-cell" id="text_{i}">
-                                        <div class="text-content">
-                                            {result_data['result'].replace(chr(10), '<br>')}
+                                        <div class="text-content">{result_data['result'].replace(chr(10), '<br>')}</div>
+                                        <div style="text-align: right; font-size: 11px; color: #888; padding-top: 10px;">
+                                            <span id="counter_{i}">{char_count}자 / {byte_count}byte</span>
                                         </div>
                                         <div class="button-group">
                                             <button class="copy-btn" onclick="copyText({i})">복사</button>
@@ -351,18 +252,14 @@ def draw_saengibu_tab(prompts):
                     """
                 
                 custom_table_html += """
-                            </tbody>
-                        </table>
-                    </div>
-                    <script>
-                        const originalTexts = [
+                            </tbody></table></div><script>const originalTexts = [
                 """
                 
                 # JavaScript 배열에 원본 텍스트 추가
-                for i, result_data in enumerate(st.session_state.generated_table_results):
+                for i, result_data in enumerate(results_data):
                     escaped_for_js = result_data['result'].replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
                     custom_table_html += f"            '{escaped_for_js}'"
-                    if i < len(st.session_state.generated_table_results) - 1:
+                    if i < len(results_data) - 1:
                         custom_table_html += ","
                     custom_table_html += "\n"
                 
@@ -391,11 +288,20 @@ def draw_saengibu_tab(prompts):
                             const currentText = originalTexts[index];
                             
                             cell.innerHTML = `
-                                <textarea class="edit-textarea">${currentText}</textarea>
-                                <button class="save-btn" onclick="saveEdit(${index})">저장</button>
-                                <button class="cancel-btn" onclick="cancelEdit(${index})">취소</button>
+                                <textarea class="edit-textarea">\${currentText}</textarea>
+                                <button class="save-btn" onclick="saveEdit(\${index})">저장</button>
+                                <button class="cancel-btn" onclick="cancelEdit(\${index})">취소</button>
                             `;
                             cell.querySelector('textarea').focus();
+                        }
+                        
+                        function updateCounter(text) {
+                            const charCount = text.length;
+                            let byteCount = 0;
+                            for (let i = 0; i < text.length; i++) {
+                                byteCount += text.charCodeAt(i) > 127 ? 2 : 1;
+                            }
+                            return `\${charCount}자 / \${byteCount}byte`;
                         }
                         
                         function saveEdit(index) {
@@ -404,14 +310,18 @@ def draw_saengibu_tab(prompts):
                             const newText = textarea.value;
                             
                             originalTexts[index] = newText;
+                            const counterText = updateCounter(newText);
                             
                             cell.innerHTML = `
                                 <div class="text-content">
-                                    ${newText.replace(/\\n/g, '<br>')}
+                                    \${newText.replace(/\\n/g, '<br>')}
+                                </div>
+                                <div style="text-align: right; font-size: 11px; color: #888; padding-top: 10px;">
+                                    <span id="counter_\${index}">\${counterText}</span>
                                 </div>
                                 <div class="button-group">
-                                    <button class="copy-btn" onclick="copyText(${index})">복사</button>
-                                    <button class="edit-btn" onclick="editText(${index})">수정</button>
+                                    <button class="copy-btn" onclick="copyText(\${index})">복사</button>
+                                    <button class="edit-btn" onclick="editText(\${index})">수정</button>
                                 </div>
                             `;
                             
@@ -421,14 +331,18 @@ def draw_saengibu_tab(prompts):
                         function cancelEdit(index) {
                             const cell = document.getElementById('text_' + index);
                             const originalText = originalTexts[index];
+                            const counterText = updateCounter(originalText);
                             
                             cell.innerHTML = `
                                 <div class="text-content">
-                                    ${originalText.replace(/\\n/g, '<br>')}
+                                    \${originalText.replace(/\\n/g, '<br>')}
+                                </div>
+                                <div style="text-align: right; font-size: 11px; color: #888; padding-top: 10px;">
+                                    <span id="counter_\${index}">\${counterText}</span>
                                 </div>
                                 <div class="button-group">
-                                    <button class="copy-btn" onclick="copyText(${index})">복사</button>
-                                    <button class="edit-btn" onclick="editText(${index})">수정</button>
+                                    <button class="copy-btn" onclick="copyText(\${index})">복사</button>
+                                    <button class="edit-btn" onclick="editText(\${index})">수정</button>
                                 </div>
                             `;
                         }
@@ -440,7 +354,7 @@ def draw_saengibu_tab(prompts):
                                 position: fixed;
                                 top: 20px;
                                 right: 20px;
-                                background: ${type === 'success' ? '#48bb78' : '#f56565'};
+                                background: \${type === 'success' ? '#48bb78' : '#f56565'};
                                 color: white;
                                 padding: 12px 20px;
                                 border-radius: 8px;
@@ -538,16 +452,13 @@ def draw_saengibu_tab(prompts):
             col_generate = st.columns([3, 1])
             with col_generate[1]:
                 if st.button("✨ 전체 생성", use_container_width=True, key="generate_all_behavior"):
-                    # 비어있는 행동 내용 확인
-                    empty_behavior_contents = [i+1 for i, data in enumerate(st.session_state.behavior_student_data) if not data["behavior_content"].strip()]
+                    # 전체 학생 행발 생성
+                    st.session_state.generated_behavior_table_results = []
                     
-                    if empty_behavior_contents:
-                        st.warning(f"{', '.join(map(str, empty_behavior_contents))}번 학생의 행동 내용을 입력해주세요.")
-                    else:
-                        # 전체 학생 행발 생성
-                        st.session_state.generated_behavior_table_results = []
-                        
-                        for i, data in enumerate(st.session_state.behavior_student_data):
+                    for i, data in enumerate(st.session_state.behavior_student_data):
+                        # 행동 내용이 있는지 확인
+                        if data["behavior_content"].strip():
+                            # 내용이 있으면, LLM을 통해 결과 생성
                             with st.spinner(f"{data['name']} 행발 생성 중..."):
                                 try:
                                     llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
@@ -561,17 +472,26 @@ def draw_saengibu_tab(prompts):
                                     })
                                     
                                     st.session_state.generated_behavior_table_results.append({
+                                        "original_number": i + 1,
                                         "name": data["name"],
                                         "result": result
                                     })
                                 except Exception as e:
                                     st.error(f"{data['name']} 행발 생성 실패: {e}")
                                     st.session_state.generated_behavior_table_results.append({
+                                        "original_number": i + 1,
                                         "name": data["name"],
                                         "result": f"생성 실패: {e}"
                                     })
+                        else:
+                            # 내용이 없으면, 빈 결과로 추가
+                            st.session_state.generated_behavior_table_results.append({
+                                "original_number": i + 1,
+                                "name": data["name"],
+                                "result": ""  # 빈 문자열로 결과를 설정
+                            })
                         
-                        st.success("전체 학생 행발 생성 완료!")
+                    st.success("전체 학생 행발 생성 완료!")
         
         
         # 결과 표시 - 교과세특과 동일한 스타일
@@ -579,149 +499,90 @@ def draw_saengibu_tab(prompts):
             with st.container(border=True):
                 st.subheader("📄 생성 결과")
                 
-                # NEIS 스타일 헤더 표시
-                st.markdown(f"""
-                <div style="
-                    background-color: #e8f4f8;
-                    padding: 8px 12px;
-                    border: 1px solid #ddd;
-                    border-bottom: none;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    font-size: 14px;
-                ">
+                # 1. 헤더 수정: "NEIS로 입력 적용" 문구 제거 및 왼쪽 정렬
+                st.markdown("""
+                <div style="background-color: #e8f4f8; padding: 8px 12px; border: 1px solid #ddd; border-bottom: none; display: flex; justify-content: flex-start; align-items: center; font-size: 14px;">
                     <span style="color: #0066cc; font-weight: bold;">행동발달상황</span>
-                    <span style="color: #666; font-size: 12px;">NEIS로 입력 적용 {len(st.session_state.generated_behavior_table_results)} ▲</span>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # 2. 엑셀 다운로드를 위한 데이터프레임 생성
+                behavior_results_data = st.session_state.generated_behavior_table_results
+                df_behavior = pd.DataFrame({
+                    "번호": [data["original_number"] for data in behavior_results_data],
+                    "이름": [data["name"] for data in behavior_results_data],
+                    "행발내용": [data["result"] for data in behavior_results_data]
+                })
+                excel_data_behavior = to_excel(df_behavior)
+
+                # 3. 엑셀 다운로드 버튼 추가
+                st.download_button(
+                    label="📥 엑셀 파일로 다운로드",
+                    data=excel_data_behavior,
+                    file_name="행동발달상황_결과.xlsx",
+                    mime="application/vnd.ms-excel",
+                    use_container_width=True
+                )
                 
-                # 행발 결과 표시용 HTML 테이블
+                # 테이블 HTML 생성 시작
                 behavior_table_html = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        .behavior-table-container {
-                            background: white;
-                            border-radius: 12px;
-                            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                            overflow: hidden;
-                            border: 1px solid #e2e8f0;
-                        }
-                        
-                        .behavior-table {
-                            width: 100%;
-                            border-collapse: collapse;
-                        }
-                        
-                        .behavior-table th {
-                            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-                            color: white;
-                            padding: 16px;
-                            text-align: center;
-                            font-weight: 600;
-                            font-size: 14px;
-                        }
-                        
-                        .behavior-table td {
-                            padding: 20px;
-                            border-bottom: 1px solid #e2e8f0;
-                            vertical-align: top;
-                        }
-                        
-                        .behavior-number {
-                            text-align: center;
-                            background: #f8fafc;
-                            font-weight: 700;
-                            width: 80px;
-                        }
-                        
-                        .behavior-name {
-                            text-align: center;
-                            background: #f8fafc;
-                            font-weight: 600;
-                            width: 120px;
-                        }
-                        
-                        .behavior-content {
-                            line-height: 1.6;
-                            font-size: 13px;
-                            color: #2d3748;
-                        }
-                        
-                        .behavior-actions {
-                            margin-top: 10px;
-                            display: flex;
-                            gap: 8px;
-                            justify-content: flex-end;
-                        }
-                        
-                        .behavior-btn {
-                            padding: 6px 12px;
-                            border: 1px solid;
-                            border-radius: 6px;
-                            cursor: pointer;
-                            font-size: 12px;
-                            background: white;
-                        }
-                        
-                        .behavior-copy {
-                            color: #4299e1;
-                            border-color: #4299e1;
-                        }
-                        
-                        .behavior-edit {
-                            color: #48bb78;
-                            border-color: #48bb78;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="behavior-table-container">
-                        <table class="behavior-table">
-                            <thead>
-                                <tr>
-                                    <th>번호</th>
-                                    <th>이름</th>
-                                    <th>행발 내용</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                <!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; padding: 20px; }
+                .behavior-table-container { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid #e2e8f0; }
+                .behavior-table { width: 100%; border-collapse: collapse; }
+                .behavior-table th { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: white; padding: 16px; text-align: center; font-weight: 600; font-size: 14px; border: none; }
+                .behavior-table th:first-child { width: 80px; }
+                .behavior-table th:nth-child(2) { width: 120px; }
+                .behavior-table td { padding: 0; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+                .text-cell { padding: 20px; position: relative; background: white; }
+                .text-content { line-height: 1.6; font-size: 13px; color: #2d3748; min-height: 60px; margin-bottom: 5px; padding-right: 100px; }
+                .char-counter { text-align: right; color: #666; font-size: 11px; margin-bottom: 10px; }
+                .button-group { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+                .copy-btn, .edit-btn { background: none; border: 1px solid #e2e8f0; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s ease; }
+                .copy-btn { color: #4299e1; border-color: #4299e1; }
+                .copy-btn:hover { background: #4299e1; color: white; }
+                .edit-btn { color: #48bb78; border-color: #48bb78; }
+                .edit-btn:hover { background: #48bb78; color: white; }
+                .edit-textarea { width: 100%; min-height: 100px; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical; }
+                .save-btn, .cancel-btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-top: 8px; margin-right: 8px; }
+                .save-btn { background: #48bb78; color: white; }
+                .cancel-btn { background: #e2e8f0; color: #4a5568; }
+                </style></head><body><div class="behavior-table-container"><table class="behavior-table">
+                <thead><tr><th>번호</th><th>이름</th><th>행발 내용</th></tr></thead><tbody>
                 """
                 
-                # 행발 데이터 추가
-                for i, result in enumerate(st.session_state.generated_behavior_table_results):
+                # 테이블 행 데이터 생성 (글자/바이트 수 카운터 추가)
+                for i, result_data in enumerate(behavior_results_data):
+                    char_count = len(result_data['result'])
+                    byte_count = sum(2 if ord(char) > 127 else 1 for char in result_data['result'])
+                    
                     behavior_table_html += f"""
                                 <tr>
-                                    <td class="behavior-number">{i+1:02d}</td>
-                                    <td class="behavior-name">{result["name"]}</td>
-                                    <td>
-                                        <div class="behavior-content" id="behavior_{i}">
-                                            {result["result"].replace(chr(10), '<br>')}
+                                    <td style="text-align: center; padding: 20px; background: #f8fafc; font-weight: 700; vertical-align: middle;">{result_data['original_number']:02d}</td>
+                                    <td style="text-align: center; padding: 20px; background: #f8fafc; font-weight: 600; vertical-align: middle;">{result_data['name']}</td>
+                                    <td class="text-cell" id="behavior_{i}">
+                                        <div class="text-content">{result_data['result'].replace(chr(10), '<br>')}</div>
+                                        <div style="text-align: right; font-size: 11px; color: #888; padding-top: 10px;">
+                                            <span id="behavior_counter_{i}">{char_count}자 / {byte_count}byte</span>
                                         </div>
-                                        <div class="behavior-actions">
-                                            <button class="behavior-btn behavior-copy" onclick="copyBehavior({i})">복사</button>
-                                            <button class="behavior-btn behavior-edit" onclick="editBehavior({i})">수정</button>
+                                        <div class="button-group">
+                                            <button class="copy-btn" onclick="copyBehavior({i})">복사</button>
+                                            <button class="edit-btn" onclick="editBehavior({i})">수정</button>
                                         </div>
                                     </td>
                                 </tr>
                     """
                 
                 behavior_table_html += """
-                            </tbody>
-                        </table>
-                    </div>
-                    <script>
-                        const behaviorTexts = [
+                            </tbody></table></div><script>const behaviorTexts = [
                 """
                 
-                # JavaScript 배열에 행발 텍스트 추가
-                for i, result in enumerate(st.session_state.generated_behavior_table_results):
-                    escaped_text = result["result"].replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
-                    behavior_table_html += f"            '{escaped_text}'"
-                    if i < len(st.session_state.generated_behavior_table_results) - 1:
+                # JavaScript 배열에 원본 텍스트 추가
+                for i, result_data in enumerate(behavior_results_data):
+                    escaped_for_js = result_data['result'].replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n').replace('\r', '')
+                    behavior_table_html += f"            '{escaped_for_js}'"
+                    if i < len(behavior_results_data) - 1:
                         behavior_table_html += ","
                     behavior_table_html += "\n"
                 
@@ -731,56 +592,114 @@ def draw_saengibu_tab(prompts):
                         function copyBehavior(index) {
                             const text = behaviorTexts[index];
                             if (navigator.clipboard) {
-                                navigator.clipboard.writeText(text).then(() => {
-                                    showBehaviorMessage('복사되었습니다!');
+                                navigator.clipboard.writeText(text).then(function() {
+                                    showBehaviorMessage('복사되었습니다!', 'success');
                                 });
+                            } else {
+                                const textArea = document.createElement('textarea');
+                                textArea.value = text;
+                                document.body.appendChild(textArea);
+                                textArea.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(textArea);
+                                showBehaviorMessage('복사되었습니다!', 'success');
                             }
                         }
                         
                         function editBehavior(index) {
-                            const contentDiv = document.getElementById('behavior_' + index);
+                            const cell = document.getElementById('behavior_' + index);
                             const currentText = behaviorTexts[index];
                             
-                            contentDiv.innerHTML = `
-                                <textarea style="width:100%; min-height:100px; padding:10px; border:2px solid #e2e8f0; border-radius:8px; font-size:13px; line-height:1.6;" id="edit_${index}">${currentText}</textarea>
-                                <div style="margin-top:8px;">
-                                    <button onclick="saveBehavior(${index})" style="background:#48bb78; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; margin-right:8px;">저장</button>
-                                    <button onclick="cancelBehavior(${index})" style="background:#e2e8f0; color:#4a5568; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">취소</button>
+                            cell.innerHTML = `
+                                <textarea class="edit-textarea">\${currentText}</textarea>
+                                <button class="save-btn" onclick="saveBehavior(\${index})">저장</button>
+                                <button class="cancel-btn" onclick="cancelBehavior(\${index})">취소</button>
+                            `;
+                            cell.querySelector('textarea').focus();
+                        }
+                        
+                        function updateBehaviorCounter(text) {
+                            const charCount = text.length;
+                            let byteCount = 0;
+                            for (let i = 0; i < text.length; i++) {
+                                byteCount += text.charCodeAt(i) > 127 ? 2 : 1;
+                            }
+                            return `\${charCount}자 / \${byteCount}byte`;
+                        }
+                        
+                        function saveBehavior(index) {
+                            const cell = document.getElementById('behavior_' + index);
+                            const textarea = cell.querySelector('textarea');
+                            const newText = textarea.value;
+                            
+                            behaviorTexts[index] = newText;
+                            const counterText = updateBehaviorCounter(newText);
+                            
+                            cell.innerHTML = `
+                                <div class="text-content">
+                                    \${newText.replace(/\\n/g, '<br>')}
+                                </div>
+                                <div style="text-align: right; font-size: 11px; color: #888; padding-top: 10px;">
+                                    <span id="behavior_counter_\${index}">\${counterText}</span>
+                                </div>
+                                <div class="button-group">
+                                    <button class="copy-btn" onclick="copyBehavior(\${index})">복사</button>
+                                    <button class="edit-btn" onclick="editBehavior(\${index})">수정</button>
+                                </div>
+                            `;
+                            
+                            showBehaviorMessage('수정되었습니다!', 'success');
+                        }
+                        
+                        function cancelBehavior(index) {
+                            const cell = document.getElementById('behavior_' + index);
+                            const originalText = behaviorTexts[index];
+                            const counterText = updateBehaviorCounter(originalText);
+                            
+                            cell.innerHTML = `
+                                <div class="text-content">
+                                    \${originalText.replace(/\\n/g, '<br>')}
+                                </div>
+                                <div style="text-align: right; font-size: 11px; color: #888; padding-top: 10px;">
+                                    <span id="behavior_counter_\${index}">\${counterText}</span>
+                                </div>
+                                <div class="button-group">
+                                    <button class="copy-btn" onclick="copyBehavior(\${index})">복사</button>
+                                    <button class="edit-btn" onclick="editBehavior(\${index})">수정</button>
                                 </div>
                             `;
                         }
                         
-                        function saveBehavior(index) {
-                            const textarea = document.getElementById('edit_' + index);
-                            const newText = textarea.value;
-                            behaviorTexts[index] = newText;
-                            
-                            const contentDiv = document.getElementById('behavior_' + index);
-                            contentDiv.innerHTML = newText.replace(/\\n/g, '<br>');
-                            showBehaviorMessage('수정되었습니다!');
-                        }
-                        
-                        function cancelBehavior(index) {
-                            const contentDiv = document.getElementById('behavior_' + index);
-                            contentDiv.innerHTML = behaviorTexts[index].replace(/\\n/g, '<br>');
-                        }
-                        
-                        function showBehaviorMessage(message) {
-                            const msgDiv = document.createElement('div');
-                            msgDiv.textContent = message;
-                            msgDiv.style.cssText = `
+                        function showBehaviorMessage(message, type) {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.textContent = message;
+                            messageDiv.style.cssText = `
                                 position: fixed;
                                 top: 20px;
                                 right: 20px;
-                                background: #48bb78;
+                                background: \${type === 'success' ? '#48bb78' : '#f56565'};
                                 color: white;
                                 padding: 12px 20px;
                                 border-radius: 8px;
                                 font-weight: 600;
                                 z-index: 1000;
+                                animation: slideIn 0.3s ease-out;
                             `;
-                            document.body.appendChild(msgDiv);
-                            setTimeout(() => msgDiv.remove(), 3000);
+                            
+                            const style = document.createElement('style');
+                            style.textContent = `
+                                @keyframes slideIn {
+                                    from { transform: translateX(100%); }
+                                    to { transform: translateX(0); }
+                                }
+                            `;
+                            document.head.appendChild(style);
+                            document.body.appendChild(messageDiv);
+                            
+                            setTimeout(() => {
+                                messageDiv.remove();
+                                style.remove();
+                            }, 3000);
                         }
                     </script>
                 </body>
