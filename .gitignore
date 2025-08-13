@@ -1,8 +1,5 @@
+# Secrets
 .env
+
+# Virtual Environment
 doc_env/
-doc_env_clean/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python

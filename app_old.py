@@ -5,6 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 import streamlit.components.v1 as components
 import re
+from utils import PRIMARY_MODEL
 
 def format_final_menu(menu_string: str) -> str:
     """
@@ -631,7 +632,7 @@ def run_chain_and_display(session_key, prompt_key, inputs, container):
         # 이미 생성된 결과가 있는지 확인
         if session_key not in st.session_state.generated_texts:
             # api_key 인자가 없어도 자동으로 환경변수에서 찾습니다.
-            llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+            llm = ChatOpenAI(model=PRIMARY_MODEL, temperature=0.5)
             prompt = PROMPTS[prompt_key]
             chain = prompt | llm | StrOutputParser()
 
@@ -961,8 +962,7 @@ with tab2:
                             "이름", 
                             value=st.session_state.student_data[i]["name"],
                             placeholder=f"학생{i+1}",
-                            key=f"name_{i}",
-                            label_visibility="collapsed"
+                            key=f"name_{i}"
                         )
                     
                     with cols[2]:
@@ -971,8 +971,7 @@ with tab2:
                             value=st.session_state.student_data[i]["observation"],
                             placeholder=f"{st.session_state.student_data[i]['name']}의 학습 활동, 발표, 성장 모습 등을 구체적으로 기록해주세요.",
                             height=100,
-                            key=f"obs_{i}",
-                            label_visibility="collapsed"
+                            key=f"obs_{i}"
                         )
                     
                     with cols[3]:
@@ -981,8 +980,7 @@ with tab2:
                             value=st.session_state.student_data[i]["achievement"],
                             placeholder=f"성취기준을 입력해주세요. (선택사항)",
                             height=100,
-                            key=f"ach_{i}",
-                            label_visibility="collapsed"
+                            key=f"ach_{i}"
                         )
                     
                     if i < num_students - 1:
@@ -1006,7 +1004,7 @@ with tab2:
                             for i, data in enumerate(st.session_state.student_data):
                                 with st.spinner(f"{data['name']} 교과세특 생성 중..."):
                                     try:
-                                        llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+                                        llm = ChatOpenAI(model=PRIMARY_MODEL, temperature=0.5)
                                         prompt = PROMPTS["student_record"]
                                         chain = prompt | llm | StrOutputParser()
                                         
@@ -1607,8 +1605,7 @@ with tab2:
                         "이름", 
                         value=st.session_state.behavior_student_data[i]["name"],
                         placeholder=f"학생{i+1}",
-                        key=f"behavior_name_{i}",
-                        label_visibility="collapsed"
+                        key=f"behavior_name_{i}"
                     )
                 
                 with cols[2]:
@@ -1617,8 +1614,7 @@ with tab2:
                         value=st.session_state.behavior_student_data[i]["behavior_content"],
                         placeholder=f"{st.session_state.behavior_student_data[i]['name']}의 행동 특성, 성장 모습, 인성 발달 등을 구체적으로 기록해주세요.",
                         height=100,
-                        key=f"behavior_content_{i}",
-                        label_visibility="collapsed"
+                        key=f"behavior_content_{i}"
                     )
                 
                 if i < num_behavior_students - 1:
@@ -1642,7 +1638,7 @@ with tab2:
                         for i, data in enumerate(st.session_state.behavior_student_data):
                             with st.spinner(f"{data['name']} 행발 생성 중..."):
                                 try:
-                                    llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+                                    llm = ChatOpenAI(model=PRIMARY_MODEL, temperature=0.5)
                                     prompt = PROMPTS["behavior_record"]
                                     chain = prompt | llm | StrOutputParser()
                                     

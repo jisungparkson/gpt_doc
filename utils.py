@@ -7,6 +7,38 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 import re
 
+# --- 프로젝트 전체에서 사용할 AI 모델 정의 ---
+PRIMARY_MODEL = "gpt-4o-mini"
+
+# --- 만능 메뉴 정리 함수 (복원) ---
+def format_meal_menu(menu_string: str) -> str:
+    """
+    어떤 형태의 메뉴 문자열이든 (HTML 태그, <br>, 숫자, 괄호 포함)
+    깔끔하게 정리하여 줄바꿈된 메뉴 목록 텍스트를 반환합니다.
+    """
+    if not isinstance(menu_string, str) or not menu_string.strip():
+        return ""  # 메뉴가 없으면 빈 문자열 반환
+
+    # 1. <br> 태그를 표준 줄바꿈 문자(\n)로 변경
+    text = re.sub(r'<br\s*/?>', '\n', menu_string, flags=re.IGNORECASE)
+
+    # 2. <div></div> 같은 모든 HTML 태그를 제거
+    text = re.sub(r'<[^>]+>', '', text)
+
+    # 3. 괄호와 그 안의 내용(알레르기 정보 등)을 모두 제거
+    text = re.sub(r'\s*\([^)]*\)', '', text)
+
+    # 4. 숫자와 점(.)으로 된 알레르기 정보도 제거
+    text = re.sub(r'\s*[\d\.]+\s*', ' ', text).strip()
+
+    # 5. 여러 개의 공백을 하나의 공백으로 변경
+    text = re.sub(r'\s+', ' ', text)
+
+    # 6. 공백을 기준으로 메뉴들을 분리하고, 각 메뉴를 줄바꿈으로 합침
+    items = [item.strip() for item in text.split(' ') if item.strip()]
+
+    return "\n".join(items)
+
 def format_final_menu(menu_string: str) -> str:
     """
     HTML, <br>, 숫자, 괄호 등 모든 불필요한 요소를 제거하고
@@ -75,7 +107,7 @@ def run_chain_and_display(session_key, prompt_key, inputs, container, prompts):
         # 이미 생성된 결과가 있는지 확인
         if session_key not in st.session_state.generated_texts:
             # api_key 인자가 없어도 자동으로 환경변수에서 찾습니다.
-            llm = ChatOpenAI(model="gpt-4o", temperature=0.5)
+            llm = ChatOpenAI(model=PRIMARY_MODEL, temperature=0.5)
             prompt = prompts[prompt_key]
             chain = prompt | llm | StrOutputParser()
 
@@ -212,32 +244,86 @@ def run_chain_and_display(session_key, prompt_key, inputs, container, prompts):
         # OPENAI_API_KEY가 .env에 없거나 잘못된 경우 에러 메시지를 표시합니다.
         st.error(f"오류가 발생했습니다. .env 파일의 OPENAI_API_KEY 설정을 확인해주세요. (에러: {e})")
 
+# --- RAG 시스템 초기화 함수 (최종 버전) ---
+@st.cache_resource
 def init_rag_system():
-    """RAG 시스템 초기화 - MultiQuery RAG 우선"""
-    rag_system_status = "none"
-    
+    """RAG 시스템 초기화 - MultiQuery RAG를 직접 구현"""
     try:
-        # MultiQuery RAG 시스템 (최고 성능)
-        from rag_system_multiquery import get_rag_answer, initialize_rag
-        rag_system_status = "multiquery_advanced"
-        print("MultiQuery RAG 시스템 로드 성공")
-        return rag_system_status, get_rag_answer, initialize_rag
-    except Exception as e:
-        print(f"MultiQuery RAG 시스템 로드 실패: {e}")
+        import os
+        import pandas as pd
+        from langchain.docstore.document import Document
+        from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+        from langchain_community.vectorstores import FAISS
+        from langchain.retrievers.multi_query import MultiQueryRetriever
+        from langchain.chains import RetrievalQA
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return "failed", None, None
+
+        # 1. 데이터 로드 및 전처리 (오류 처리 기능이 강화된 버전)
+        # on_bad_lines='warn' : 형식이 잘못된 줄은 경고만 하고 건너뜀
+        # quotechar='"' : 큰따옴표로 감싸인 필드 내부의 콤마는 구분자로 인식하지 않음
         try:
-            from rag_system_v2 import get_rag_answer, initialize_rag
-            rag_system_status = "v2_advanced"
-            return rag_system_status, get_rag_answer, initialize_rag
-        except ImportError:
-            try:
-                from rag_system import get_rag_answer, initialize_rag
-                rag_system_status = "v1_standard"
-                return rag_system_status, get_rag_answer, initialize_rag
-            except ImportError:
-                try:
-                    from rag_system_lite import get_rag_answer, initialize_rag
-                    rag_system_status = "lite"
-                    return rag_system_status, get_rag_answer, initialize_rag
-                except ImportError:
-                    rag_system_status = "failed"
-                    return rag_system_status, None, None
+            df = pd.read_csv(
+                "data/school_info.csv", 
+                on_bad_lines='warn', 
+                quotechar='"'
+            )
+        except Exception as e:
+            st.error(f"CSV 파일을 읽는 중 심각한 오류 발생: {e}")
+            return "failed", None, None
+            
+        df.dropna(subset=['question', 'answer'], inplace=True)
+        documents = [Document(page_content=f"질문: {row['question']} 답변: {row['answer']}") for _, row in df.iterrows()]
+
+        # 2. 임베딩 및 Vector Store 생성
+        embeddings = OpenAIEmbeddings(api_key=api_key)
+        vectorstore = FAISS.from_documents(documents, embeddings)
+
+        # 3. MultiQueryRetriever 설정
+        llm = ChatOpenAI(temperature=0, api_key=api_key)
+        retriever_from_llm = MultiQueryRetriever.from_llm(
+            retriever=vectorstore.as_retriever(search_kwargs={'k': 3}), llm=llm
+        )
+        
+        # 4. QA 체인 생성 (소스 문서 반환 옵션 활성화)
+        qa_chain = RetrievalQA.from_chain_type(llm, retriever=retriever_from_llm, return_source_documents=True)
+
+        # 5. 답변 생성 함수 정의
+        def get_rag_answer(question):
+            response = qa_chain.invoke(question)
+            results = []
+            
+            # 소스 문서가 있는지 확인하고 처리
+            if response.get('source_documents'):
+                for doc in response['source_documents']:
+                    # '답변: ' 이후의 내용만 추출
+                    content = doc.page_content
+                    if '답변: ' in content:
+                        answer_part = content.split('답변: ', 1)[1]
+                    else:
+                        answer_part = content
+                    results.append({'answer': answer_part, 'confidence': 0.85})
+            
+            # 만약 소스 문서가 없다면, 최종 결과(result)라도 사용
+            if not results and response.get('result'):
+                 results.append({'answer': response.get('result'), 'confidence': 0.3})
+            
+            # 그래도 결과가 없다면 최종 실패 메시지
+            if not results:
+                 results.append({'answer': "죄송합니다. 관련된 정보를 찾을 수 없습니다.", 'confidence': 0.1})
+
+            return {'results': results}
+
+        # 6. UI에서 호출할 초기화 함수
+        def initialize_rag():
+            pass # @st.cache_resource 덕분에 이미 로드됨
+
+        return "success", get_rag_answer, initialize_rag
+
+    except Exception as e:
+        st.error(f"RAG 시스템 초기화 중 오류: {e}")
+        return "failed", None, None
