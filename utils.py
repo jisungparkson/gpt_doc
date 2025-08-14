@@ -244,10 +244,10 @@ def run_chain_and_display(session_key, prompt_key, inputs, container, prompts):
         # OPENAI_API_KEY가 .env에 없거나 잘못된 경우 에러 메시지를 표시합니다.
         st.error(f"오류가 발생했습니다. .env 파일의 OPENAI_API_KEY 설정을 확인해주세요. (에러: {e})")
 
-# --- RAG 시스템 초기화 함수 (최종 버전) ---
+# --- RAG 시스템 초기화 함수 (Cohere Rerank 업그레이드 버전) ---
 @st.cache_resource
 def init_rag_system():
-    """RAG 시스템 초기화 - MultiQuery RAG를 직접 구현"""
+    """RAG 시스템 초기화 - Cohere Rerank를 사용한 고급 검색 정확도 시스템"""
     try:
         import os
         import pandas as pd
@@ -255,17 +255,24 @@ def init_rag_system():
         from langchain_openai import OpenAIEmbeddings, ChatOpenAI
         from langchain_community.vectorstores import FAISS
         from langchain.retrievers.multi_query import MultiQueryRetriever
+        from langchain.retrievers import ContextualCompressionRetriever
+        from langchain_cohere import CohereRerank
         from langchain.chains import RetrievalQA
         from dotenv import load_dotenv
         
         load_dotenv()
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        cohere_api_key = os.getenv("COHERE_API_KEY")
+        
+        if not openai_api_key:
+            st.error("OPENAI_API_KEY가 .env 파일에 설정되지 않았습니다.")
             return "failed", None, None
+        
+        if not cohere_api_key:
+            st.warning("COHERE_API_KEY가 설정되지 않았습니다. Cohere Rerank 없이 기본 MultiQuery RAG로 실행됩니다.")
+            # Cohere 없이도 작동하도록 fallback 모드
 
         # 1. 데이터 로드 및 전처리 (오류 처리 기능이 강화된 버전)
-        # on_bad_lines='warn' : 형식이 잘못된 줄은 경고만 하고 건너뜀
-        # quotechar='"' : 큰따옴표로 감싸인 필드 내부의 콤마는 구분자로 인식하지 않음
         try:
             df = pd.read_csv(
                 "data/school_info.csv", 
@@ -280,45 +287,104 @@ def init_rag_system():
         documents = [Document(page_content=f"질문: {row['question']} 답변: {row['answer']}") for _, row in df.iterrows()]
 
         # 2. 임베딩 및 Vector Store 생성
-        embeddings = OpenAIEmbeddings(api_key=api_key)
+        embeddings = OpenAIEmbeddings(api_key=openai_api_key)
         vectorstore = FAISS.from_documents(documents, embeddings)
 
-        # 3. MultiQueryRetriever 설정
-        llm = ChatOpenAI(temperature=0, api_key=api_key)
-        retriever_from_llm = MultiQueryRetriever.from_llm(
-            retriever=vectorstore.as_retriever(search_kwargs={'k': 3}), llm=llm
+        # 3. 기본 Retriever 설정 (더 많은 문서를 가져오도록 k값 증가)
+        base_retriever = vectorstore.as_retriever(search_kwargs={'k': 10})
+
+        # 4. MultiQueryRetriever로 1차 검색기 강화
+        llm = ChatOpenAI(temperature=0, api_key=openai_api_key, model=PRIMARY_MODEL)
+        multiquery_retriever = MultiQueryRetriever.from_llm(
+            retriever=base_retriever, llm=llm
         )
         
-        # 4. QA 체인 생성 (소스 문서 반환 옵션 활성화)
-        qa_chain = RetrievalQA.from_chain_type(llm, retriever=retriever_from_llm, return_source_documents=True)
+        # 5. [핵심] Cohere Rerank를 사용한 최종 검색기 구성
+        if cohere_api_key:
+            # Cohere Rerank 압축기 설정
+            compressor = CohereRerank(
+                cohere_api_key=cohere_api_key, 
+                top_n=3,  # 최종 3개 문서만 선택
+                model="rerank-multilingual-v3.0"  # 한국어 지원 모델
+            )
+            
+            # ContextualCompressionRetriever로 최종 검색기 완성
+            # 1차 검색기(MultiQuery)가 문서를 찾아오면, 압축기(Cohere Rerank)가 순위를 재정렬
+            final_retriever = ContextualCompressionRetriever(
+                base_compressor=compressor, 
+                base_retriever=multiquery_retriever
+            )
+            
+            print("[DEBUG] Cohere Rerank가 활성화된 고급 RAG 시스템이 초기화되었습니다.")
+        else:
+            # Cohere API 키가 없으면 기본 MultiQuery RAG 사용
+            final_retriever = multiquery_retriever
+            print("[DEBUG] 기본 MultiQuery RAG 시스템이 초기화되었습니다.")
+        
+        # 6. QA 체인 생성 (최종 검색기 사용)
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm, 
+            retriever=final_retriever, 
+            return_source_documents=True
+        )
 
-        # 5. 답변 생성 함수 정의
+        # 7. 답변 생성 함수 정의 (Cohere Rerank 결과 반영)
         def get_rag_answer(question):
-            response = qa_chain.invoke(question)
-            results = []
-            
-            # 소스 문서가 있는지 확인하고 처리
-            if response.get('source_documents'):
-                for doc in response['source_documents']:
-                    # '답변: ' 이후의 내용만 추출
-                    content = doc.page_content
-                    if '답변: ' in content:
-                        answer_part = content.split('답변: ', 1)[1]
-                    else:
-                        answer_part = content
-                    results.append({'answer': answer_part, 'confidence': 0.85})
-            
-            # 만약 소스 문서가 없다면, 최종 결과(result)라도 사용
-            if not results and response.get('result'):
-                 results.append({'answer': response.get('result'), 'confidence': 0.3})
-            
-            # 그래도 결과가 없다면 최종 실패 메시지
-            if not results:
-                 results.append({'answer': "죄송합니다. 관련된 정보를 찾을 수 없습니다.", 'confidence': 0.1})
+            try:
+                response = qa_chain.invoke({"query": question})
+                results = []
+                
+                # 소스 문서가 있는지 확인하고 처리
+                if response.get('source_documents'):
+                    for i, doc in enumerate(response['source_documents']):
+                        # '답변: ' 이후의 내용만 추출
+                        content = doc.page_content
+                        if '답변: ' in content:
+                            answer_part = content.split('답변: ', 1)[1]
+                        else:
+                            answer_part = content
+                        
+                        # Cohere Rerank가 적용된 경우 순위에 따른 신뢰도 차등 적용
+                        if cohere_api_key:
+                            confidence = max(0.95 - (i * 0.1), 0.5)  # 첫 번째: 0.95, 두 번째: 0.85, ...
+                        else:
+                            confidence = 0.85  # 기본 신뢰도
+                            
+                        results.append({
+                            'answer': answer_part, 
+                            'confidence': confidence,
+                            'source': f"문서 {i+1}"
+                        })
+                
+                # 만약 소스 문서가 없다면, 최종 결과(result)라도 사용
+                if not results and response.get('result'):
+                     results.append({
+                         'answer': response.get('result'), 
+                         'confidence': 0.3,
+                         'source': "LLM 직접 생성"
+                     })
+                
+                # 그래도 결과가 없다면 최종 실패 메시지
+                if not results:
+                     results.append({
+                         'answer': "죄송합니다. 관련된 정보를 찾을 수 없습니다.", 
+                         'confidence': 0.1,
+                         'source': "시스템"
+                     })
 
-            return {'results': results}
+                return {'results': results}
+                
+            except Exception as e:
+                print(f"[ERROR] RAG 답변 생성 중 오류: {e}")
+                return {
+                    'results': [{
+                        'answer': f"답변 생성 중 오류가 발생했습니다: {str(e)}", 
+                        'confidence': 0.0,
+                        'source': "오류"
+                    }]
+                }
 
-        # 6. UI에서 호출할 초기화 함수
+        # 8. UI에서 호출할 초기화 함수
         def initialize_rag():
             pass # @st.cache_resource 덕분에 이미 로드됨
 
@@ -326,4 +392,7 @@ def init_rag_system():
 
     except Exception as e:
         st.error(f"RAG 시스템 초기화 중 오류: {e}")
+        print(f"[ERROR] 상세 오류 정보: {e}")
+        import traceback
+        print(traceback.format_exc())
         return "failed", None, None

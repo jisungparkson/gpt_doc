@@ -10,7 +10,9 @@
       "Bash(mv:*)",
       "Bash(rm:*)",
       "Bash(source:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(where python)",
+      "Bash(./doc_env/Scripts/activate.bat)"
     ],
     "deny": []
   }
