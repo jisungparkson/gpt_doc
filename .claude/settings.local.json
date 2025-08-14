@@ -12,7 +12,8 @@
       "Bash(source:*)",
       "Bash(echo:*)",
       "Bash(where python)",
-      "Bash(./doc_env/Scripts/activate.bat)"
+      "Bash(./doc_env/Scripts/activate.bat)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
