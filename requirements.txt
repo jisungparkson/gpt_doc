@@ -1,5 +1,8 @@
 streamlit
+langchain
 langchain-openai
+langchain-community
+langchain-core
 python-dotenv
 pandas
 numpy
@@ -9,3 +12,7 @@ transformers
 torch
 cohere
 openpyxl
+faiss-cpu
+chromadb
+tiktoken
+openai
