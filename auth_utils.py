@@ -47,27 +47,6 @@ def sign_in(supabase: Client, email, password):
     except Exception as e:
         return "error", "이메일 또는 비밀번호가 잘못되었습니다."
 
-def sign_in_with_google(supabase: Client):
-    """
-    Supabase를 이용한 구글 OAuth 로그인
-    """
-    try:
-        supabase.auth.sign_in_with_oauth({
-            "provider": "google",
-        })
-    except Exception as e:
-        st.error(f"구글 로그인 중 오류가 발생했습니다: {e}")
-
-def send_password_reset_email(supabase: Client, email: str):
-    """
-    비밀번호 재설정 이메일을 발송합니다.
-    """
-    try:
-        supabase.auth.reset_password_for_email(email)
-        return "success", f"{email} 주소로 비밀번호 재설정 링크를 보냈습니다. 이메일을 확인해주세요."
-    except Exception as e:
-        return "error", f"이메일 발송 중 오류가 발생했습니다: {e}"
-
 def sign_out(supabase: Client):
     """
     Supabase를 이용한 로그아웃 함수
@@ -75,13 +54,3 @@ def sign_out(supabase: Client):
     supabase.auth.sign_out()
     st.session_state['logged_in'] = False
     st.session_state.pop('user', None)
-
-def update_user_password(supabase: Client, new_password: str):
-    """
-    로그인된 사용자의 비밀번호를 업데이트합니다.
-    """
-    try:
-        supabase.auth.update_user({"password": new_password})
-        return "success", "비밀번호가 성공적으로 변경되었습니다."
-    except Exception as e:
-        return "error", f"비밀번호 변경 중 오류가 발생했습니다: {e}"

@@ -1,140 +1,95 @@
+"""
+교실의 온도 - 메인 애플리케이션
+"""
 import streamlit as st
 from dotenv import load_dotenv
-from streamlit_option_menu import option_menu
+import os
 
-# auth_utils의 모든 함수를 import
-from auth_utils import (
-    init_supabase_client, sign_up, sign_in, sign_out,
-    sign_in_with_google, send_password_reset_email, update_user_password
-)
-
-# 탭 관련 함수들을 import
-from giamun_tab import draw_giamun_tab
-from saengibu_tab import draw_saengibu_tab
-from info_search_tab import draw_info_search_tab
-
-# .env 파일 로드
+# 환경 변수 로드
 load_dotenv()
 
-# CSS 파일 로드 함수 정의
-def load_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-
-# Supabase 클라이언트 초기화
-supabase = init_supabase_client()
-
-# 페이지 기본 설정
+# 페이지 설정
 st.set_page_config(page_title="교실의 온도", page_icon="🌡️", layout="wide")
-# CSS 파일 적용
-load_css("style.css")
+
+# CSS 파일 로드 함수
+def load_css():
+    """전역 CSS 파일을 로드하여 모든 레이아웃 충돌 문제를 해결합니다."""
+    css_file_path = os.path.join(os.path.dirname(__file__), "style.css")
+    try:
+        with open(css_file_path, "r", encoding="utf-8") as f:
+            css_content = f.read()
+        st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error("⚠️ style.css 파일을 찾을 수 없습니다. 프로젝트 루트에 style.css 파일이 있는지 확인해주세요.")
+    except Exception as e:
+        st.error(f"⚠️ CSS 파일 로드 중 오류 발생: {e}")
+
+# 전역 CSS 로드
+load_css()
 
 # 세션 상태 초기화
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
+if 'generated_texts' not in st.session_state:
+    st.session_state.generated_texts = {}
 
-# --- UI 렌더링 시작 ---
+# RAG 시스템 초기화 (앱 시작 시 한 번만)
+if 'rag_initialized' not in st.session_state:
+    st.session_state.rag_initialized = False
 
-# 1. 로그인이 되지 않은 경우의 UI
-if not st.session_state['logged_in']:
-    col1, col2, col3 = st.columns([1, 1.2, 1])
+# 프롬프트 템플릿 import
+from prompts import PROMPTS
 
-    with col2:
-        st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        st.markdown('<h1 class="login-title">교실의 온도 🌡️</h1>', unsafe_allow_html=True)
+# 탭별 모듈 import
+from giamun_tab import draw_giamun_tab
+from saengibu_tab import draw_saengibu_tab
+from communication_tabs import draw_parent_reply_tab, draw_newsletter_tab
+from info_search_tab import draw_info_search_tab
+from meals_tab import draw_meals_tab
+import events_tab
 
-        login_tab, signup_tab = st.tabs(["로그인", "회원가입"])
+# 메인 앱 구성
+st.title("🌡️ 교실의 온도")
+st.markdown("""
+<div style="background: linear-gradient(135deg, #e3f2fd 0%, #f8f9fa 100%); padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
+    <h3 style="color: #1565c0; margin: 0; font-weight: 600;">차가운 행정 업무를 덜어내고, 교실에 따뜻한 온기를 더하다</h3>
+    <p style="margin: 0; color: #424242; font-size: 16px; line-height: 1.6;">
+        선생님의 하루를 가볍게 만들어 줄 스마트 동료입니다. 아래 탭에서 원하시는 작업을 선택해주세요.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-        with login_tab:
-            with st.form("login_form"):
-                st.text_input("이메일", placeholder="이메일 주소를 입력하세요", key="login_email")
-                st.text_input("비밀번호", type="password", placeholder="비밀번호를 입력하세요", key="login_password")
-                if st.form_submit_button("로그인"):
-                    email = st.session_state.login_email
-                    password = st.session_state.login_password
-                    status, message = sign_in(supabase, email, password)
-                    if status == "success":
-                        st.rerun()
-                    else:
-                        st.error(message)
-            
-            st.divider()
-            st.markdown('<div class="google-login-button">', unsafe_allow_html=True)
-            if st.button("Google로 로그인", use_container_width=True, key="google_login"):
-                sign_in_with_google(supabase)
-            st.markdown('</div>', unsafe_allow_html=True)
+# 기능 탭 생성
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "🗂️ 기안문 작성",
+    "🏗️ 생기부 기록",
+    "💝 학부모 답장",
+    "🎯 가정통신문 작성",
+    "📞 전주화정초 정보 검색",
+    "🍽️ 급식 식단표",
+    "📅 화정초 월중행사",
+])
 
-        with signup_tab:
-            with st.form("signup_form"):
-                st.text_input("사용할 이메일", key="signup_email")
-                st.text_input("사용할 비밀번호", type="password", key="signup_password")
-                st.text_input("비밀번호 확인", type="password", key="signup_password_confirm")
-                if st.form_submit_button("회원가입"):
-                    email = st.session_state.signup_email
-                    pw = st.session_state.signup_password
-                    pw_confirm = st.session_state.signup_password_confirm
-                    if pw != pw_confirm:
-                        st.error("비밀번호가 일치하지 않습니다.")
-                    else:
-                        status, message = sign_up(supabase, email, pw)
-                        if status == "success":
-                            st.success(message)
-                        else:
-                            st.error(message)
+# 탭별 기능 실행
+with tab1:
+    draw_giamun_tab(PROMPTS)
 
-        with st.expander("비밀번호를 잊으셨나요?"):
-            with st.form("password_reset_form"):
-                st.text_input("가입한 이메일 주소", key="reset_email")
-                if st.form_submit_button("재설정 링크 보내기"):
-                    email = st.session_state.reset_email
-                    status, message = send_password_reset_email(supabase, email)
-                    if status == "success":
-                        st.success(message)
-                    else:
-                        st.error(message)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+with tab2:
+    draw_saengibu_tab(PROMPTS)
 
-# 2. 로그인이 된 경우의 UI
-else:
-    with st.sidebar:
-        st.write(f"**{st.session_state['user'].email}**")
-        st.write("환영합니다!")
-        st.divider()
-        selected = option_menu(
-            menu_title=None,
-            options=["기안문 작성", "생기부 기록", "정보 검색", "급식 식단표", "월중행사", "내 정보"],
-            icons=['file-earmark-text', 'person-lines-fill', 'search', 'egg-fried', 'calendar-check', 'gear-fill'],
-            menu_icon="cast", default_index=0
-        )
-        st.divider()
-        if st.button("로그아웃", use_container_width=True):
-            sign_out(supabase)
-            st.rerun()
+with tab3:
+    draw_parent_reply_tab(PROMPTS)
 
-    st.title(f"AI 교사 업무 비서 🌡️ - {selected}")
+with tab4:
+    draw_newsletter_tab(PROMPTS)
 
-    if selected == "기안문 작성":
-        st.write("기안문 작성 탭 콘텐츠")
-    elif selected == "생기부 기록":
-        st.write("생기부 기록 탭 콘텐츠")
-    elif selected == "정보 검색":
-        draw_info_search_tab()
-    elif selected == "내 정보":
-        st.subheader("비밀번호 변경")
-        with st.form("password_update_form"):
-            st.text_input("새 비밀번호", type="password", key="new_password")
-            st.text_input("새 비밀번호 확인", type="password", key="confirm_password")
-            if st.form_submit_button("비밀번호 변경"):
-                pw = st.session_state.new_password
-                pw_confirm = st.session_state.confirm_password
-                if not pw:
-                    st.warning("새 비밀번호를 입력해주세요.")
-                elif pw != pw_confirm:
-                    st.error("비밀번호가 일치하지 않습니다.")
-                else:
-                    status, message = update_user_password(supabase, pw)
-                    if status == "success":
-                        st.success(message)
-                    else:
-                        st.error(message)
+with tab5:
+    draw_info_search_tab()
+
+with tab6:
+    draw_meals_tab()
+
+with tab7:
+    events_tab.draw_events_tab()
+
+# 하단 제작자 정보
+st.markdown("---")
+st.markdown('<div style="text-align: center; padding: 15px; color: #888;">Made by <strong>전주화정초 박성광</strong></div>', unsafe_allow_html=True)

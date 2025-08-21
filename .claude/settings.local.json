@@ -14,9 +14,7 @@
       "Bash(where python)",
       "Bash(./doc_env/Scripts/activate.bat)",
       "Bash(git push:*)",
-      "Bash(cat:*)",
-      "Bash(pip uninstall:*)",
-      "Bash(pip show:*)"
+      "Bash(cat:*)"
     ],
     "deny": []
   }
