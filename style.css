@@ -1,234 +1,65 @@
-/* =======================================================
-   교실의 온도 - 전역 CSS 스타일 파일
-   모든 레이아웃 충돌 문제를 해결하고 일관된 디자인 제공
-   ======================================================= */
+/* Google Fonts에서 'Noto Sans KR' 폰트 가져오기 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 
-/* --- 전역(Global) 레이아웃 설정 --- */
-/* Streamlit 메인 블록의 최대 너비를 완전히 제거하여 와이드 모드 효과를 극대화 */
-[data-testid="block-container"] {
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 auto !important;
-    padding: 2rem 1rem !important;
+/* 전체 앱에 적용될 기본 스타일 */
+body {
+    font-family: 'Noto Sans KR', sans-serif;
 }
 
-/* 모든 Streamlit 컨테이너 클래스들을 강제로 전체 너비 사용 */
+/* Streamlit의 메인 컨테이너 스타일 */
+.stApp {
+    background-color: #F0F2F6;
+}
+
+/* Streamlit 메인 콘텐츠 컨테이너의 상단 여백 제거 */
 .block-container {
-    max-width: none !important;
-    width: 100% !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
+    padding-top: 3rem !important;
+    margin-top: 0 !important;
 }
 
-/* Streamlit 메인 컨테이너 전체 너비 사용 */
-.main > div {
-    width: 100% !important;
-    max-width: none !important;
+/* 로그인 컨테이너 스타일 */
+.login-container {
+    padding: 3.5rem 2.5rem 3rem 2.5rem;
+    background-color: #ffffff;
+    border-radius: 15px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e6e6e6;
 }
 
-.main .block-container {
-    max-width: 100% !important;
-    width: 100% !important;
-}
-
-/* 추가적인 강제 와이드 모드 설정 */
-.element-container {
-    width: 100% !important;
-    max-width: none !important;
-}
-
-.stMainBlockContainer {
-    max-width: none !important;
-    padding-top: 1rem !important;
-}
-
-/* --- 기본 폰트 및 색상 설정 --- */
-html, body, [class*="st-"] {
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-}
-
-/* --- 버튼 스타일 --- */
-.stButton > button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
+/* 로그인 카드 안의 메인 제목 스타일 */
+.login-title {
+    background: transparent !important;
     border: none !important;
-    border-radius: 8px !important;
-    padding: 0.5rem 1rem !important;
-    font-weight: 600 !important;
-    transition: all 0.3s ease !important;
-}
-
-.stButton > button:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
-}
-
-/* --- keyboard_arrow 텍스트 문제 완전 해결 --- */
-/* 개발자 도구에서 찾아낸 정확한 CSS 클래스를 사용하여 강제로 숨김 */
-.st-emotion-cache-zkd0x0.ejhh0er0 {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    width: 0 !important;
-    overflow: hidden !important;
-}
-
-/* Material Icon span 태그들을 모두 숨김 */
-span[data-testid="stIconMaterial"] {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* keyboard_arrow 텍스트를 포함한 모든 span 요소를 숨김 */
-span:contains("keyboard_arrow_right"),
-span:contains("keyboard_arrow_down"),
-span:contains("keyboard_arrow_up"),
-span:contains("keyboard_arrow_left") {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* expander 관련 아이콘 문제 해결 */
-div[data-testid="stExpander"] span[class*="st-emotion-cache"] {
-    font-family: 'Pretendard', sans-serif !important;
-}
-
-/* --- 생기부/행발 테이블 스타일 --- */
-.custom-table-container, .behavior-table-container {
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-    margin-top: 1rem;
-    width: 100% !important;
-}
-
-.custom-table, .behavior-table {
-    width: 100% !important;
-    border-collapse: collapse;
-}
-
-.custom-table th, .behavior-table th {
-    color: white;
-    padding: 14px;
-    text-align: center;
-    font-weight: 600;
-    font-size: 14px;
-}
-
-.custom-table th {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.behavior-table th {
-    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-}
-
-/* 컬럼 너비 설정 */
-.custom-table th:nth-child(1), .custom-table td:nth-child(1) { width: 8%; }
-.custom-table th:nth-child(2), .custom-table td:nth-child(2) { width: 12%; }
-.custom-table th:nth-child(3), .custom-table td:nth-child(3) { width: 60%; }
-.custom-table th:nth-child(4), .custom-table td:nth-child(4) { width: 20%; }
-
-.behavior-table th:nth-child(1), .behavior-table td:nth-child(1) { width: 8%; }
-.behavior-table th:nth-child(2), .behavior-table td:nth-child(2) { width: 12%; }
-.behavior-table th:nth-child(3), .behavior-table td:nth-child(3) { width: 50%; }
-.behavior-table th:nth-child(4), .behavior-table td:nth-child(4) { width: 30%; }
-
-.custom-table td, .behavior-table td {
-    padding: 12px 14px;
-    text-align: left;
-    border-bottom: 1px solid #e2e8f0;
-    vertical-align: top;
-}
-
-.custom-table tr:hover, .behavior-table tr:hover {
-    background-color: #f8fafc;
-}
-
-/* --- iframe 컨테이너 전체 너비 사용 --- */
-iframe {
-    width: 100% !important;
-    max-width: none !important;
-}
-
-/* HTML iframe wrapper 전체 너비 사용 */
-div[style*="width: 100%"] iframe {
-    width: 100% !important;
-}
-
-/* --- Streamlit 탭 스타일 개선 --- */
-.stTabs [data-baseweb="tab-list"] {
-    width: 100% !important;
-}
-
-.stTabs [data-baseweb="tab"] {
-    width: auto !important;
-    white-space: nowrap !important;
-}
-
-/* --- 컨테이너 및 expander 스타일 --- */
-.stContainer {
-    width: 100% !important;
-    max-width: none !important;
-}
-
-div[data-testid="stExpander"] {
-    width: 100% !important;
-}
-
-/* --- 텍스트 입력 필드 스타일 --- */
-.stTextInput > div > div > input {
-    border-radius: 6px !important;
-    border: 1px solid #d1d5db !important;
-}
-
-.stTextArea > div > div > textarea {
-    border-radius: 6px !important;
-    border: 1px solid #d1d5db !important;
-}
-
-.stSelectbox > div > div {
-    border-radius: 6px !important;
-    border: 1px solid #d1d5db !important;
-}
-
-/* --- 미디어 쿼리: 반응형 디자인 --- */
-@media (max-width: 768px) {
-    [data-testid="block-container"] {
-        width: 98% !important;
-        padding: 1rem 0.5rem !important;
-    }
+    box-shadow: none !important;
     
-    .custom-table th, .custom-table td,
-    .behavior-table th, .behavior-table td {
-        padding: 8px !important;
-        font-size: 12px !important;
-    }
+    font-size: 2.5rem;
+    font-weight: 700;
+    text-align: center;
+    color: #1E293B;
+    margin-bottom: 2rem;
+    padding-bottom: 0 !important;
 }
 
-/* --- 추가 유틸리티 클래스 --- */
-.full-width {
-    width: 100% !important;
-    max-width: none !important;
+/* 구글 로그인 버튼 컨테이너 */
+.google-login-button {
+    text-align: center;
 }
 
-.text-center {
-    text-align: center !important;
+/* 구글 로그인 버튼 스타일 */
+.google-login-button .stButton button {
+    background-color: #FFFFFF !important;
+    color: #444444 !important;
+    border: 1px solid #E0E0E0 !important;
+    font-weight: 500 !important;
+    background-image: url('https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg');
+    background-repeat: no-repeat;
+    background-size: 18px 18px;
+    background-position: 16px 50%;
+    padding-left: 42px !important;
+    text-align: center;
 }
 
-.mt-1 { margin-top: 0.5rem !important; }
-.mt-2 { margin-top: 1rem !important; }
-.mt-3 { margin-top: 1.5rem !important; }
-
-.mb-1 { margin-bottom: 0.5rem !important; }
-.mb-2 { margin-bottom: 1rem !important; }
-.mb-3 { margin-bottom: 1.5rem !important; }
-
-/* --- 디버깅용 (필요시 주석 해제) --- */
-/*
-[data-testid="block-container"] {
-    border: 2px solid red !important;
+.google-login-button .stButton button:hover {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    border-color: #CCCCCC !important;
 }
-*/
