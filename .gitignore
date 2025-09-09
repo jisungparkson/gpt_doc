@@ -3,3 +3,6 @@
 
 # Virtual Environment
 doc_env/
+
+# 코드깍는 노인에서 추가한 내용
+.commit_message.txt

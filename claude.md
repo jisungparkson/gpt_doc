@@ -104,3 +104,11 @@
 5. **보안:** API 키 등 민감 정보의 안전한 관리
 
 이 가이드라인은 프로젝트의 일관성과 품질을 보장하기 위한 핵심 규칙입니다. 모든 개발 작업은 이 원칙을 준수하여 진행되어야 합니다.
+
+# Claude Code Project Setup
+
+## Version Control
+* Whenever code changes are made, you must record a one-line description with emoji in korean of the change in `.commit_message.txt` with Edit Tool.
+   - Read `.commit_message.txt` first, and then Edit.
+   - Overwrite regardless of existing content.
+   - If it was a git revert related operation, make the .commit_message.txt file empty.

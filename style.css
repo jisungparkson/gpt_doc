@@ -1,65 +1,191 @@
-/* Google Fonts에서 'Noto Sans KR' 폰트 가져오기 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 
-/* 전체 앱에 적용될 기본 스타일 */
-body {
-    font-family: 'Noto Sans KR', sans-serif;
+body { font-family: 'Pretendard', sans-serif; }
+.stApp { background-color: #F9FAFB; }
+header[data-testid="stHeader"] { display: none !important; }
+.block-container { padding: 2rem 3rem !important; }
+
+/* 상단 메뉴 (streamlit-option-menu) 디자인 */
+ul[data-testid="st-ul"] {
+    border-bottom: 1px solid #E5E7EB;
+    padding-bottom: 10px !important;
+}
+li[data-testid="st-li"] a {
+    padding: 10px 15px !important;
+    border-radius: 8px;
+    font-weight: 600;
+}
+li[data-testid="st-li"] a.nav-link-selected {
+    background-color: #4F46E5 !important;
+    color: white !important;
 }
 
-/* Streamlit의 메인 컨테이너 스타일 */
-.stApp {
-    background-color: #F0F2F6;
+/* 오른쪽 사용자 메뉴/로그아웃 버튼 정렬 */
+.user-menu-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 50px; /* 메뉴 높이와 맞춤 */
+    gap: 1rem;
+}
+.user-email {
+    font-weight: 600;
+    color: #374151;
 }
 
-/* Streamlit 메인 콘텐츠 컨테이너의 상단 여백 제거 */
-.block-container {
-    padding-top: 3rem !important;
+/* st.container(border=True)에 대한 카드 디자인 */
+div[data-testid="stVerticalBlock"] .stContainer {
+    background-color: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease-in-out;
+    border: 1px solid #E5E7EB;
+    height: 100%; /* 컬럼 내에서 높이를 동일하게 맞춤 */
+}
+div[data-testid="stVerticalBlock"] .stContainer:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* 대시보드 카드 내 버튼 스타일 */
+div[data-testid="stVerticalBlock"] .stContainer .stButton button {
+    background-color: #4F46E5 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    height: 40px !important;
+    transition: all 0.2s ease;
+}
+div[data-testid="stVerticalBlock"] .stContainer .stButton button:hover {
+    background-color: #4338CA !important;
+    transform: translateY(-1px);
+}
+
+/* 로그아웃 버튼 스타일 */
+.user-menu-container .stButton button {
+    background-color: #DC2626 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    height: 36px !important;
+    padding: 0 16px !important;
+    transition: all 0.2s ease;
+}
+.user-menu-container .stButton button:hover {
+    background-color: #B91C1C !important;
+    transform: translateY(-1px);
+}
+
+/* === 로그인 페이지 스타일 === */
+
+/* 로그인 카드 (st.container) 스타일 */
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div > div[data-testid="stVerticalBlock"] > .stContainer {
+    background-color: #FFFFFF;
+    border-radius: 12px;
+    padding: 2.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-top: 4px solid #DC2626;
+}
+
+/* 카드 내부 제목 스타일 */
+.login-title-in-card {
+    font-size: 2.2rem !important;
+    font-weight: 800 !important;
+    text-align: center !important;
+    color: #111827 !important;
+    margin-bottom: 2rem !important;
     margin-top: 0 !important;
 }
 
-/* 로그인 컨테이너 스타일 */
-.login-container {
-    padding: 3.5rem 2.5rem 3rem 2.5rem;
-    background-color: #ffffff;
-    border-radius: 15px;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-    border: 1px solid #e6e6e6;
+/* 탭 메뉴 */
+div[data-baseweb="tabs"] {
+    border-bottom: 1px solid #E5E7EB;
+    margin-bottom: 1.5rem;
+}
+div[data-baseweb="tab-list"] {
+    justify-content: center;
+    gap: 1.5rem;
+}
+button[data-baseweb="tab"] {
+    padding: 0.5rem 0.25rem 0.75rem !important;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #6B7280;
+    border-bottom: 2px solid transparent !important;
+    transition: all 0.2s ease;
+}
+button[data-baseweb="tab"]:hover {
+    color: #111827;
 }
 
-/* 로그인 카드 안의 메인 제목 스타일 */
-.login-title {
-    background: transparent !important;
+/* 활성화된 탭 (빨간색) */
+button[aria-selected="true"] {
+    color: #DC2626 !important;
+    border-bottom-color: #DC2626 !important;
+}
+
+/* 입력 필드 */
+label[data-baseweb="form-field-label"] {
+    font-weight: 500;
+    color: #374151;
+}
+div[data-testid="stTextInput"] input {
+    border-radius: 8px;
+    border-color: #D1D5DB;
+    transition: all 0.2s ease;
+}
+div[data-testid="stTextInput"] input:focus {
+    border-color: #DC2626 !important;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+    outline: none;
+}
+
+/* 폼 버튼 (로그인, 회원가입, 재설정) */
+.stForm .stButton button {
+    background-color: #DC2626 !important;
+    color: #FFFFFF !important;
     border: none !important;
-    box-shadow: none !important;
-    
-    font-size: 2.5rem;
-    font-weight: 700;
-    text-align: center;
-    color: #1E293B;
-    margin-bottom: 2rem;
-    padding-bottom: 0 !important;
+    font-weight: 600 !important;
+    height: 44px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+.stForm .stButton button:hover {
+    background-color: #B91C1C !important;
+    transform: translateY(-1px);
 }
 
-/* 구글 로그인 버튼 컨테이너 */
-.google-login-button {
-    text-align: center;
+/* 구분선 (st.divider) */
+hr {
+    border-top: 1px solid #E5E7EB !important;
+    margin: 1.5rem 0 !important;
 }
 
-/* 구글 로그인 버튼 스타일 */
-.google-login-button .stButton button {
+/* Google 로그인 버튼 (일반 버튼) - 로그인 페이지 컨텍스트에서만 */
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div > div[data-testid="stVerticalBlock"] > .stContainer .stButton:not(.stForm .stButton) button {
     background-color: #FFFFFF !important;
-    color: #444444 !important;
-    border: 1px solid #E0E0E0 !important;
-    font-weight: 500 !important;
-    background-image: url('https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg');
-    background-repeat: no-repeat;
-    background-size: 18px 18px;
-    background-position: 16px 50%;
-    padding-left: 42px !important;
-    text-align: center;
+    color: #4B5563 !important;
+    border: 1px solid #D1D5DB !important;
+    height: 44px;
+    font-weight: 600 !important;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+div[data-testid="stVerticalBlock"] > div[data-testid="stHorizontalBlock"] > div > div[data-testid="stVerticalBlock"] > .stContainer .stButton:not(.stForm .stButton) button:hover {
+    background-color: #F9FAFB !important;
+    border-color: #9CA3AF !important;
+    transform: translateY(-1px);
 }
 
-.google-login-button .stButton button:hover {
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    border-color: #CCCCCC !important;
+/* Expander 스타일링 */
+div[data-testid="stExpander"] {
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    margin-top: 1.5rem;
+}
+div[data-testid="stExpander"]:hover {
+    border-color: #D1D5DB;
 }
